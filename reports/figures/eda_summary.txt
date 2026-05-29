@@ -1,0 +1,17 @@
+Linhas tratadas: 640889
+Dispositivos de origem: 15
+Dispositivos com janelas suficientes: 11
+Janelas agregadas: 6399
+Frame len medio: 72.797
+IAT medio: 0.015586
+Top 10 MACs de origem:
+- 4c:a9:19:e9:7e:af: 308228
+- e0:01:c7:56:19:0c: 113411
+- 44:17:93:14:08:37: 52340
+- d8:c8:0c:1a:72:05: 33615
+- fe:51:35:71:8e:66: 31412
+- 38:a5:c9:ac:2e:89: 30963
+- fc:3c:d7:c7:37:8e: 22476
+- 04:7e:4a:a1:b1:38: 14927
+- d8:c8:0c:fb:c6:e3: 12061
+- bc:bd:84:f0:4a:33: 11680
