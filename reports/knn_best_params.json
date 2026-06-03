@@ -1,0 +1,9 @@
+{
+  "model": "KNN",
+  "best_params": {
+    "model__weights": "distance",
+    "model__p": 1,
+    "model__n_neighbors": 7
+  },
+  "best_macro_f1_cv": 0.9449621788612166
+}

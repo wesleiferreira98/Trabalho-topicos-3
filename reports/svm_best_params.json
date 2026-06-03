@@ -1,0 +1,9 @@
+{
+  "model": "SVM",
+  "best_params": {
+    "model__kernel": "rbf",
+    "model__gamma": "scale",
+    "model__C": 10.0
+  },
+  "best_macro_f1_cv": 0.9549888770968572
+}

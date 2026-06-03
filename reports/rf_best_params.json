@@ -1,0 +1,11 @@
+{
+  "model": "Random Forest",
+  "best_params": {
+    "n_estimators": 200,
+    "min_samples_split": 2,
+    "min_samples_leaf": 1,
+    "max_features": "log2",
+    "max_depth": 10
+  },
+  "best_macro_f1_cv": 0.9783543466424804
+}
