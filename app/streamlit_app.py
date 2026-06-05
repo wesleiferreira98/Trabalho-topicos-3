@@ -30,6 +30,22 @@ def load_cv_results() -> pd.DataFrame | None:
 
 
 @st.cache_data
+def load_temporal_cv_results() -> pd.DataFrame | None:
+	path = REPORTS_DIR / "temporal_cv_results.csv"
+	if not path.exists():
+		return None
+	return pd.read_csv(path)
+
+
+@st.cache_data
+def load_sliding_temporal_cv_results() -> pd.DataFrame | None:
+	path = REPORTS_DIR / "sliding_temporal_cv_results.csv"
+	if not path.exists():
+		return None
+	return pd.read_csv(path)
+
+
+@st.cache_data
 def load_model_benchmark() -> pd.DataFrame | None:
 	path = REPORTS_DIR / "model_benchmark.csv"
 	if not path.exists():
@@ -62,6 +78,8 @@ def show_figure(path: Path, caption: str) -> None:
 
 df = load_processed_training()
 cv_results = load_cv_results()
+temporal_cv_results = load_temporal_cv_results()
+sliding_temporal_cv_results = load_sliding_temporal_cv_results()
 benchmark_df = load_model_benchmark()
 report_markdowns = load_report_markdowns()
 
@@ -135,6 +153,22 @@ with model_tab:
 	else:
 		st.info("Rode src/train_rf.py para gerar as metricas de validacao.")
 
+	st.subheader("Validacao temporal")
+	if temporal_cv_results is not None:
+		st.caption("A CV temporal expanding treina com historico acumulado e testa no bloco futuro seguinte de cada dispositivo.")
+		st.dataframe(temporal_cv_results, width="stretch")
+		st.line_chart(temporal_cv_results.set_index("fold")[["accuracy", "macro_f1", "weighted_f1"]])
+	else:
+		st.info("Rode src/train_rf.py para gerar reports/temporal_cv_results.csv.")
+
+	st.subheader("Validacao temporal sliding")
+	if sliding_temporal_cv_results is not None:
+		st.caption("A CV temporal sliding treina em uma janela fixa recente e testa no bloco futuro seguinte, sem acumular todo o historico.")
+		st.dataframe(sliding_temporal_cv_results, width="stretch")
+		st.line_chart(sliding_temporal_cv_results.set_index("fold")[["accuracy", "macro_f1", "weighted_f1"]])
+	else:
+		st.info("Rode src/train_rf.py para gerar reports/sliding_temporal_cv_results.csv.")
+
 	st.subheader("Comparacao entre algoritmos")
 	if benchmark_df is not None:
 		display_benchmark = benchmark_df.copy()
@@ -144,6 +178,14 @@ with model_tab:
 			)
 		st.dataframe(display_benchmark, width="stretch")
 		show_figure(FIGURES_DIR / "model_comparison_cv.png", "Comparacao entre Random Forest, KNN e SVM")
+		show_figure(
+			FIGURES_DIR / "model_comparison_temporal_cv.png",
+			"Comparacao entre Random Forest, KNN e SVM na CV temporal",
+		)
+		show_figure(
+			FIGURES_DIR / "model_comparison_sliding_temporal_cv.png",
+			"Comparacao entre Random Forest, KNN e SVM na CV temporal sliding",
+		)
 
 		if {"model", "tuning_macro_f1", "best_params"}.issubset(benchmark_df.columns):
 			st.subheader("Hiperparametros selecionados automaticamente")
@@ -159,6 +201,8 @@ with model_tab:
 	show_figure(FIGURES_DIR / "rf_confusion_matrix.png", "Matriz de confusao do modelo")
 	show_figure(FIGURES_DIR / "rf_feature_importance.png", "Importancia das features")
 	show_figure(FIGURES_DIR / "rf_cv_metrics_by_fold.png", "Evolucao das metricas por fold da CV estratificada")
+	show_figure(FIGURES_DIR / "rf_temporal_cv_metrics_by_fold.png", "Evolucao das metricas por fold da CV temporal")
+	show_figure(FIGURES_DIR / "rf_sliding_temporal_cv_metrics_by_fold.png", "Evolucao das metricas por fold da CV temporal sliding")
 
 with report_tab:
 	st.subheader("Relatorios")

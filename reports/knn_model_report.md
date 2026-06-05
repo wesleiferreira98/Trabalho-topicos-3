@@ -6,6 +6,10 @@
 - Janelas usadas no modelo: 6399
 - Acuracia media da CV estratificada: 0.9687
 - Macro F1 medio da CV estratificada: 0.9446
+- Acuracia media da CV temporal: 0.9537
+- Macro F1 medio da CV temporal: 0.8927
+- Acuracia media da CV temporal sliding: 0.9393
+- Macro F1 medio da CV temporal sliding: 0.8688
 
 ## EDA
 ```text
@@ -59,6 +63,24 @@ fe:51:35:71:8e:66       0.95      0.87      0.91        63
 | 4 | 5119 | 1280 | 0.9742 | 0.9481 | 0.9740 |
 | 5 | 5120 | 1279 | 0.9703 | 0.9538 | 0.9699 |
 
+### Validacao cruzada temporal
+| fold | train_windows | test_windows | accuracy | macro_f1 | weighted_f1 |
+| --- | --- | --- | --- | --- | --- |
+| 1 | 1062 | 1068 | 0.9391 | 0.8713 | 0.9368 |
+| 2 | 2130 | 1066 | 0.9644 | 0.9397 | 0.9642 |
+| 3 | 3196 | 1066 | 0.9606 | 0.9079 | 0.9604 |
+| 4 | 4262 | 1065 | 0.9408 | 0.8066 | 0.9352 |
+| 5 | 5327 | 1072 | 0.9636 | 0.9378 | 0.9629 |
+
+### Validacao cruzada temporal sliding
+| fold | train_windows | test_windows | accuracy | macro_f1 | weighted_f1 |
+| --- | --- | --- | --- | --- | --- |
+| 1 | 1062 | 1068 | 0.9391 | 0.8713 | 0.9368 |
+| 2 | 1068 | 1066 | 0.9568 | 0.9163 | 0.9568 |
+| 3 | 1066 | 1066 | 0.9428 | 0.8626 | 0.9406 |
+| 4 | 1066 | 1065 | 0.9371 | 0.8597 | 0.9332 |
+| 5 | 1065 | 1072 | 0.9207 | 0.8340 | 0.9199 |
+
 ### Hiperparametros selecionados automaticamente
 - Melhor macro F1 medio na busca: 0.9450
 - model__weights: distance
@@ -68,6 +90,10 @@ fe:51:35:71:8e:66       0.95      0.87      0.91        63
 ## Artefatos do Modelo
 - reports/figures/knn_confusion_matrix.png
 - reports/figures/knn_cv_metrics_by_fold.png
+- reports/figures/knn_temporal_cv_metrics_by_fold.png
+- reports/figures/knn_sliding_temporal_cv_metrics_by_fold.png
 - reports/knn_cv_results.csv
+- reports/knn_temporal_cv_results.csv
+- reports/knn_sliding_temporal_cv_results.csv
 - models/knn_device_fingerprint.joblib
 - reports/knn_best_params.json

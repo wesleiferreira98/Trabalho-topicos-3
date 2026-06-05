@@ -6,6 +6,10 @@
 - Janelas usadas no modelo: 6399
 - Acuracia media da CV estratificada: 0.9823
 - Macro F1 medio da CV estratificada: 0.9764
+- Acuracia media da CV temporal: 0.9743
+- Macro F1 medio da CV temporal: 0.9548
+- Acuracia media da CV temporal sliding: 0.9599
+- Macro F1 medio da CV temporal sliding: 0.9147
 
 ## EDA
 ```text
@@ -59,6 +63,24 @@ fe:51:35:71:8e:66       0.95      0.95      0.95        63
 | 4 | 5119 | 1280 | 0.9797 | 0.9625 | 0.9795 |
 | 5 | 5120 | 1279 | 0.9844 | 0.9814 | 0.9844 |
 
+### Validacao cruzada temporal
+| fold | train_windows | test_windows | accuracy | macro_f1 | weighted_f1 |
+| --- | --- | --- | --- | --- | --- |
+| 1 | 1062 | 1068 | 0.9625 | 0.9295 | 0.9611 |
+| 2 | 2130 | 1066 | 0.9822 | 0.9793 | 0.9821 |
+| 3 | 3196 | 1066 | 0.9747 | 0.9476 | 0.9748 |
+| 4 | 4262 | 1065 | 0.9765 | 0.9655 | 0.9766 |
+| 5 | 5327 | 1072 | 0.9757 | 0.9522 | 0.9752 |
+
+### Validacao cruzada temporal sliding
+| fold | train_windows | test_windows | accuracy | macro_f1 | weighted_f1 |
+| --- | --- | --- | --- | --- | --- |
+| 1 | 1062 | 1068 | 0.9625 | 0.9295 | 0.9611 |
+| 2 | 1068 | 1066 | 0.9737 | 0.9709 | 0.9735 |
+| 3 | 1066 | 1066 | 0.9700 | 0.9457 | 0.9697 |
+| 4 | 1066 | 1065 | 0.9408 | 0.8415 | 0.9314 |
+| 5 | 1065 | 1072 | 0.9524 | 0.8858 | 0.9494 |
+
 ### Hiperparametros selecionados automaticamente
 - Melhor macro F1 medio na busca: 0.9784
 - n_estimators: 200
@@ -68,11 +90,11 @@ fe:51:35:71:8e:66       0.95      0.95      0.95        63
 - max_depth: 10
 
 ### Comparacao entre algoritmos
-| model | holdout_accuracy | holdout_macro_f1 | holdout_weighted_f1 | cv_accuracy_mean | cv_macro_f1_mean | cv_weighted_f1_mean | tuning_macro_f1 | best_params |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| Random Forest | 0.9743 | 0.9527 | 0.9739 | 0.9823 | 0.9764 | 0.9824 | 0.9784 | {"max_depth": 10, "max_features": "log2", "min_samples_leaf": 1, "min_samples_split": 2, "n_estimators": 200} |
-| SVM | 0.9665 | 0.9334 | 0.9674 | 0.9612 | 0.9525 | 0.9621 | 0.9550 | {"model__C": 10.0, "model__gamma": "scale", "model__kernel": "rbf"} |
-| KNN | 0.9680 | 0.9444 | 0.9677 | 0.9687 | 0.9446 | 0.9685 | 0.9450 | {"model__n_neighbors": 7, "model__p": 1, "model__weights": "distance"} |
+| model | holdout_accuracy | holdout_macro_f1 | holdout_weighted_f1 | cv_accuracy_mean | cv_macro_f1_mean | cv_weighted_f1_mean | temporal_cv_accuracy_mean | temporal_cv_macro_f1_mean | temporal_cv_weighted_f1_mean | sliding_temporal_cv_accuracy_mean | sliding_temporal_cv_macro_f1_mean | sliding_temporal_cv_weighted_f1_mean | tuning_macro_f1 | best_params |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| Random Forest | 0.9743 | 0.9527 | 0.9739 | 0.9823 | 0.9764 | 0.9824 | 0.9743 | 0.9548 | 0.9740 | 0.9599 | 0.9147 | 0.9570 | 0.9784 | {"max_depth": 10, "max_features": "log2", "min_samples_leaf": 1, "min_samples_split": 2, "n_estimators": 200} |
+| SVM | 0.9665 | 0.9334 | 0.9674 | 0.9612 | 0.9525 | 0.9621 | 0.9502 | 0.9174 | 0.9507 | 0.9152 | 0.8638 | 0.9170 | 0.9550 | {"model__C": 10.0, "model__gamma": "scale", "model__kernel": "rbf"} |
+| KNN | 0.9680 | 0.9444 | 0.9677 | 0.9687 | 0.9446 | 0.9685 | 0.9537 | 0.8927 | 0.9519 | 0.9393 | 0.8688 | 0.9375 | 0.9450 | {"model__n_neighbors": 7, "model__p": 1, "model__weights": "distance"} |
 
 ### Features mais importantes
 - frame_len_max: 0.1623
@@ -90,7 +112,11 @@ fe:51:35:71:8e:66       0.95      0.95      0.95        63
 ## Artefatos do Modelo
 - reports/figures/rf_confusion_matrix.png
 - reports/figures/rf_cv_metrics_by_fold.png
+- reports/figures/rf_temporal_cv_metrics_by_fold.png
+- reports/figures/rf_sliding_temporal_cv_metrics_by_fold.png
 - reports/rf_cv_results.csv
+- reports/rf_temporal_cv_results.csv
+- reports/rf_sliding_temporal_cv_results.csv
 - models/rf_device_fingerprint.joblib
 - reports/figures/rf_feature_importance.png
 - reports/model_benchmark.csv

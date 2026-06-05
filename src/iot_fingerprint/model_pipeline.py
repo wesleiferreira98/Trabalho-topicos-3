@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Callable
 
 import matplotlib.pyplot as plt
+import numpy as np
 import pandas as pd
 import seaborn as sns
 from joblib import dump
@@ -39,7 +40,7 @@ def prepare_features() -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.Dat
 
     counts = features["wlan.sa"].value_counts()
     valid_devices = counts[counts >= MIN_WINDOWS_PER_DEVICE].index
-    features = features[features["wlan.sa"].isin(valid_devices)].copy()
+    features = features[features["wlan.sa"].isin(valid_devices)].copy().reset_index(drop=True)
 
     train_df, test_df = temporal_device_split(features)
     return df, features, train_df, test_df, features.drop(columns=["wlan.sa", "_window"])
@@ -98,6 +99,139 @@ def stratified_cv(
     return pd.DataFrame(fold_metrics)
 
 
+def temporal_cv_splits(
+    features: pd.DataFrame,
+    n_splits: int = CV_FOLDS,
+) -> list[tuple[np.ndarray, np.ndarray]]:
+    splits: list[tuple[np.ndarray, np.ndarray]] = []
+
+    for fold in range(1, n_splits + 1):
+        train_indices: list[int] = []
+        test_indices: list[int] = []
+
+        for _, device_rows in features.groupby("wlan.sa", sort=False):
+            ordered_indices = device_rows.sort_values("_window").index.to_numpy(dtype=int)
+            boundaries = np.linspace(0, len(ordered_indices), n_splits + 2, dtype=int)
+            train_end = boundaries[fold]
+            test_end = boundaries[fold + 1]
+
+            if train_end == 0 or test_end <= train_end:
+                continue
+
+            train_indices.extend(ordered_indices[:train_end].tolist())
+            test_indices.extend(ordered_indices[train_end:test_end].tolist())
+
+        if train_indices and test_indices:
+            splits.append(
+                (
+                    np.array(sorted(train_indices), dtype=int),
+                    np.array(sorted(test_indices), dtype=int),
+                )
+            )
+
+    return splits
+
+
+def temporal_cv(
+    features: pd.DataFrame,
+    estimator: object,
+    n_splits: int = CV_FOLDS,
+) -> pd.DataFrame:
+    x = features.drop(columns=["wlan.sa", "_window"])
+    y = features["wlan.sa"]
+    fold_metrics: list[dict[str, float | int]] = []
+
+    for fold, (train_idx, test_idx) in enumerate(temporal_cv_splits(features, n_splits=n_splits), start=1):
+        fold_estimator = clone(estimator)
+        x_train = x.iloc[train_idx]
+        y_train = y.iloc[train_idx]
+        x_test = x.iloc[test_idx]
+        y_test = y.iloc[test_idx]
+
+        fold_estimator.fit(x_train, y_train)
+        predictions = fold_estimator.predict(x_test)
+
+        fold_metrics.append(
+            {
+                "fold": fold,
+                "train_windows": len(train_idx),
+                "test_windows": len(test_idx),
+                "accuracy": accuracy_score(y_test, predictions),
+                "macro_f1": f1_score(y_test, predictions, average="macro"),
+                "weighted_f1": f1_score(y_test, predictions, average="weighted"),
+            }
+        )
+
+    return pd.DataFrame(fold_metrics)
+
+
+def sliding_temporal_cv_splits(
+    features: pd.DataFrame,
+    n_splits: int = CV_FOLDS,
+) -> list[tuple[np.ndarray, np.ndarray]]:
+    splits: list[tuple[np.ndarray, np.ndarray]] = []
+
+    for fold in range(n_splits):
+        train_indices: list[int] = []
+        test_indices: list[int] = []
+
+        for _, device_rows in features.groupby("wlan.sa", sort=False):
+            ordered_indices = device_rows.sort_values("_window").index.to_numpy(dtype=int)
+            boundaries = np.linspace(0, len(ordered_indices), n_splits + 2, dtype=int)
+            train_start = boundaries[fold]
+            train_end = boundaries[fold + 1]
+            test_end = boundaries[fold + 2]
+
+            if train_end <= train_start or test_end <= train_end:
+                continue
+
+            train_indices.extend(ordered_indices[train_start:train_end].tolist())
+            test_indices.extend(ordered_indices[train_end:test_end].tolist())
+
+        if train_indices and test_indices:
+            splits.append(
+                (
+                    np.array(sorted(train_indices), dtype=int),
+                    np.array(sorted(test_indices), dtype=int),
+                )
+            )
+
+    return splits
+
+
+def sliding_temporal_cv(
+    features: pd.DataFrame,
+    estimator: object,
+    n_splits: int = CV_FOLDS,
+) -> pd.DataFrame:
+    x = features.drop(columns=["wlan.sa", "_window"])
+    y = features["wlan.sa"]
+    fold_metrics: list[dict[str, float | int]] = []
+
+    for fold, (train_idx, test_idx) in enumerate(sliding_temporal_cv_splits(features, n_splits=n_splits), start=1):
+        fold_estimator = clone(estimator)
+        x_train = x.iloc[train_idx]
+        y_train = y.iloc[train_idx]
+        x_test = x.iloc[test_idx]
+        y_test = y.iloc[test_idx]
+
+        fold_estimator.fit(x_train, y_train)
+        predictions = fold_estimator.predict(x_test)
+
+        fold_metrics.append(
+            {
+                "fold": fold,
+                "train_windows": len(train_idx),
+                "test_windows": len(test_idx),
+                "accuracy": accuracy_score(y_test, predictions),
+                "macro_f1": f1_score(y_test, predictions, average="macro"),
+                "weighted_f1": f1_score(y_test, predictions, average="weighted"),
+            }
+        )
+
+    return pd.DataFrame(fold_metrics)
+
+
 def benchmark_models(
     model_specs: list[ModelSpec],
     features: pd.DataFrame,
@@ -112,6 +246,8 @@ def benchmark_models(
         estimator, best_params, best_cv_score = tune_estimator(spec, x_train, y_train)
         holdout_metrics = evaluate_holdout(estimator, x_train, y_train, x_test, y_test)
         cv_results = stratified_cv(features, estimator)
+        temporal_cv_results = temporal_cv(features, estimator)
+        sliding_temporal_cv_results = sliding_temporal_cv(features, estimator)
         rows.append(
             {
                 "model": spec.name,
@@ -121,6 +257,12 @@ def benchmark_models(
                 "cv_accuracy_mean": cv_results["accuracy"].mean(),
                 "cv_macro_f1_mean": cv_results["macro_f1"].mean(),
                 "cv_weighted_f1_mean": cv_results["weighted_f1"].mean(),
+                "temporal_cv_accuracy_mean": temporal_cv_results["accuracy"].mean(),
+                "temporal_cv_macro_f1_mean": temporal_cv_results["macro_f1"].mean(),
+                "temporal_cv_weighted_f1_mean": temporal_cv_results["weighted_f1"].mean(),
+                "sliding_temporal_cv_accuracy_mean": sliding_temporal_cv_results["accuracy"].mean(),
+                "sliding_temporal_cv_macro_f1_mean": sliding_temporal_cv_results["macro_f1"].mean(),
+                "sliding_temporal_cv_weighted_f1_mean": sliding_temporal_cv_results["weighted_f1"].mean(),
                 "tuning_macro_f1": best_cv_score,
                 "best_params": json.dumps(best_params, ensure_ascii=False, sort_keys=True) if best_params else "{}",
             }
@@ -206,11 +348,29 @@ def run_training_pipeline(
         print(importances.sort_values(ascending=False).head(5))
 
     cv_results = stratified_cv(features, estimator)
+    temporal_cv_results = temporal_cv(features, estimator)
+    sliding_temporal_cv_results = sliding_temporal_cv(features, estimator)
     print("Validacao cruzada estratificada:")
     print(cv_results.to_string(index=False, float_format=lambda value: f"{value:.4f}"))
     print("Media CV estratificada:")
     print(
         cv_results[["accuracy", "macro_f1", "weighted_f1"]]
+        .mean()
+        .to_string(float_format=lambda value: f"{value:.4f}")
+    )
+    print("Validacao cruzada temporal:")
+    print(temporal_cv_results.to_string(index=False, float_format=lambda value: f"{value:.4f}"))
+    print("Media CV temporal:")
+    print(
+        temporal_cv_results[["accuracy", "macro_f1", "weighted_f1"]]
+        .mean()
+        .to_string(float_format=lambda value: f"{value:.4f}")
+    )
+    print("Validacao cruzada temporal sliding:")
+    print(sliding_temporal_cv_results.to_string(index=False, float_format=lambda value: f"{value:.4f}"))
+    print("Media CV temporal sliding:")
+    print(
+        sliding_temporal_cv_results[["accuracy", "macro_f1", "weighted_f1"]]
         .mean()
         .to_string(float_format=lambda value: f"{value:.4f}")
     )
@@ -225,10 +385,24 @@ def run_training_pipeline(
     if importances is not None:
         save_feature_importance_figure(model_spec, importances)
     save_cv_metrics_figure(model_spec, cv_results)
+    save_cv_metrics_figure(
+        model_spec,
+        temporal_cv_results,
+        file_suffix="temporal_cv_metrics_by_fold",
+        evaluation_label="CV temporal",
+    )
+    save_cv_metrics_figure(
+        model_spec,
+        sliding_temporal_cv_results,
+        file_suffix="sliding_temporal_cv_metrics_by_fold",
+        evaluation_label="CV temporal sliding",
+    )
     save_model_outputs(
         model_spec,
         estimator,
         cv_results,
+        temporal_cv_results,
+        sliding_temporal_cv_results,
         benchmark_df,
         df,
         features,
@@ -244,6 +418,8 @@ def save_model_outputs(
     model_spec: ModelSpec,
     estimator: object,
     cv_results: pd.DataFrame,
+    temporal_cv_results: pd.DataFrame,
+    sliding_temporal_cv_results: pd.DataFrame,
     benchmark_df: pd.DataFrame | None,
     df: pd.DataFrame,
     features: pd.DataFrame,
@@ -257,6 +433,8 @@ def save_model_outputs(
     MODELS_DIR.mkdir(parents=True, exist_ok=True)
     dump(estimator, MODELS_DIR / f"{model_spec.slug}_device_fingerprint.joblib")
     cv_results.to_csv(REPORTS_DIR / f"{model_spec.slug}_cv_results.csv", index=False)
+    temporal_cv_results.to_csv(REPORTS_DIR / f"{model_spec.slug}_temporal_cv_results.csv", index=False)
+    sliding_temporal_cv_results.to_csv(REPORTS_DIR / f"{model_spec.slug}_sliding_temporal_cv_results.csv", index=False)
     if best_params is not None:
         tuning_payload = {
             "model": model_spec.name,
@@ -269,15 +447,44 @@ def save_model_outputs(
         )
     if model_spec.slug == "rf":
         cv_results.to_csv(REPORTS_DIR / "cv_results.csv", index=False)
+        temporal_cv_results.to_csv(REPORTS_DIR / "temporal_cv_results.csv", index=False)
+        sliding_temporal_cv_results.to_csv(REPORTS_DIR / "sliding_temporal_cv_results.csv", index=False)
     if benchmark_df is not None:
         benchmark_df.to_csv(REPORTS_DIR / "model_benchmark.csv", index=False)
-        save_model_comparison_figure(benchmark_df)
+        save_model_comparison_figure(
+            benchmark_df,
+            value_vars=["cv_accuracy_mean", "cv_macro_f1_mean", "cv_weighted_f1_mean"],
+            title="Comparacao entre modelos na CV estratificada",
+            output_name="model_comparison_cv.png",
+        )
+        save_model_comparison_figure(
+            benchmark_df,
+            value_vars=[
+                "temporal_cv_accuracy_mean",
+                "temporal_cv_macro_f1_mean",
+                "temporal_cv_weighted_f1_mean",
+            ],
+            title="Comparacao entre modelos na CV temporal",
+            output_name="model_comparison_temporal_cv.png",
+        )
+        save_model_comparison_figure(
+            benchmark_df,
+            value_vars=[
+                "sliding_temporal_cv_accuracy_mean",
+                "sliding_temporal_cv_macro_f1_mean",
+                "sliding_temporal_cv_weighted_f1_mean",
+            ],
+            title="Comparacao entre modelos na CV temporal sliding",
+            output_name="model_comparison_sliding_temporal_cv.png",
+        )
     write_consolidated_report(
         model_spec,
         df,
         features,
         importances,
         cv_results,
+        temporal_cv_results,
+        sliding_temporal_cv_results,
         benchmark_df,
         y_test,
         predictions,
@@ -317,7 +524,12 @@ def save_feature_importance_figure(model_spec: ModelSpec, importances: pd.Series
     plt.close()
 
 
-def save_cv_metrics_figure(model_spec: ModelSpec, cv_results: pd.DataFrame) -> None:
+def save_cv_metrics_figure(
+    model_spec: ModelSpec,
+    cv_results: pd.DataFrame,
+    file_suffix: str = "cv_metrics_by_fold",
+    evaluation_label: str = "CV estratificada",
+) -> None:
     FIGURES_DIR.mkdir(parents=True, exist_ok=True)
     melted = cv_results.melt(
         id_vars=["fold"],
@@ -325,33 +537,56 @@ def save_cv_metrics_figure(model_spec: ModelSpec, cv_results: pd.DataFrame) -> N
         var_name="metric",
         value_name="value",
     )
+    min_metric = float(melted["value"].min())
+    lower_bound = max(0.0, min_metric - 0.03)
+    upper_bound = min(1.01, max(1.0, float(melted["value"].max()) + 0.01))
     plt.figure(figsize=(9, 5))
     sns.lineplot(data=melted, x="fold", y="value", hue="metric", marker="o")
-    plt.title(f"Evolucao das metricas por fold do {model_spec.name}")
+    plt.title(f"Evolucao das metricas por fold da {evaluation_label} do {model_spec.name}")
     plt.xlabel("Fold")
     plt.ylabel("Valor da metrica")
-    plt.ylim(0.85, 1.01)
+    plt.ylim(lower_bound, upper_bound)
     plt.tight_layout()
-    plt.savefig(FIGURES_DIR / f"{model_spec.slug}_cv_metrics_by_fold.png", dpi=200)
+    plt.savefig(FIGURES_DIR / f"{model_spec.slug}_{file_suffix}.png", dpi=200)
     plt.close()
 
 
-def save_model_comparison_figure(benchmark_df: pd.DataFrame) -> None:
+def save_model_comparison_figure(
+    benchmark_df: pd.DataFrame,
+    value_vars: list[str],
+    title: str,
+    output_name: str,
+) -> None:
     FIGURES_DIR.mkdir(parents=True, exist_ok=True)
     melted = benchmark_df.melt(
         id_vars=["model"],
-        value_vars=["cv_accuracy_mean", "cv_macro_f1_mean", "cv_weighted_f1_mean"],
+        value_vars=value_vars,
         var_name="metric",
         value_name="value",
     )
+    metric_labels = {
+        "cv_accuracy_mean": "Accuracy",
+        "cv_macro_f1_mean": "Macro F1",
+        "cv_weighted_f1_mean": "Weighted F1",
+        "temporal_cv_accuracy_mean": "Accuracy",
+        "temporal_cv_macro_f1_mean": "Macro F1",
+        "temporal_cv_weighted_f1_mean": "Weighted F1",
+        "sliding_temporal_cv_accuracy_mean": "Accuracy",
+        "sliding_temporal_cv_macro_f1_mean": "Macro F1",
+        "sliding_temporal_cv_weighted_f1_mean": "Weighted F1",
+    }
+    melted["metric"] = melted["metric"].map(metric_labels).fillna(melted["metric"])
+    min_metric = float(melted["value"].min())
+    lower_bound = max(0.0, min_metric - 0.03)
+    upper_bound = min(1.01, max(1.0, float(melted["value"].max()) + 0.01))
     plt.figure(figsize=(10, 6))
     sns.barplot(data=melted, x="model", y="value", hue="metric")
-    plt.title("Comparacao entre modelos na CV estratificada")
+    plt.title(title)
     plt.xlabel("Modelo")
     plt.ylabel("Valor medio")
-    plt.ylim(0.85, 1.01)
+    plt.ylim(lower_bound, upper_bound)
     plt.tight_layout()
-    plt.savefig(FIGURES_DIR / "model_comparison_cv.png", dpi=200)
+    plt.savefig(FIGURES_DIR / output_name, dpi=200)
     plt.close()
 
 
@@ -361,6 +596,8 @@ def write_consolidated_report(
     features: pd.DataFrame,
     importances: pd.Series | None,
     cv_results: pd.DataFrame,
+    temporal_cv_results: pd.DataFrame,
+    sliding_temporal_cv_results: pd.DataFrame,
     benchmark_df: pd.DataFrame | None,
     y_test: pd.Series,
     predictions: pd.Series,
@@ -382,6 +619,10 @@ def write_consolidated_report(
         f"- Janelas usadas no modelo: {len(features)}",
         f"- Acuracia media da CV estratificada: {cv_results['accuracy'].mean():.4f}",
         f"- Macro F1 medio da CV estratificada: {cv_results['macro_f1'].mean():.4f}",
+        f"- Acuracia media da CV temporal: {temporal_cv_results['accuracy'].mean():.4f}",
+        f"- Macro F1 medio da CV temporal: {temporal_cv_results['macro_f1'].mean():.4f}",
+        f"- Acuracia media da CV temporal sliding: {sliding_temporal_cv_results['accuracy'].mean():.4f}",
+        f"- Macro F1 medio da CV temporal sliding: {sliding_temporal_cv_results['macro_f1'].mean():.4f}",
         "",
         "## EDA",
     ]
@@ -397,6 +638,12 @@ def write_consolidated_report(
             "",
             "### Validacao cruzada estratificada",
             cv_results_to_markdown(cv_results),
+            "",
+            "### Validacao cruzada temporal",
+            cv_results_to_markdown(temporal_cv_results),
+            "",
+            "### Validacao cruzada temporal sliding",
+            cv_results_to_markdown(sliding_temporal_cv_results),
             "",
         ]
     )
@@ -423,7 +670,11 @@ def write_consolidated_report(
             "## Artefatos do Modelo",
             f"- reports/figures/{model_spec.slug}_confusion_matrix.png",
             f"- reports/figures/{model_spec.slug}_cv_metrics_by_fold.png",
+            f"- reports/figures/{model_spec.slug}_temporal_cv_metrics_by_fold.png",
+            f"- reports/figures/{model_spec.slug}_sliding_temporal_cv_metrics_by_fold.png",
             f"- reports/{model_spec.slug}_cv_results.csv",
+            f"- reports/{model_spec.slug}_temporal_cv_results.csv",
+            f"- reports/{model_spec.slug}_sliding_temporal_cv_results.csv",
             f"- models/{model_spec.slug}_device_fingerprint.joblib",
             "",
         ]
@@ -434,6 +685,8 @@ def write_consolidated_report(
     if benchmark_df is not None:
         report_lines.insert(len(report_lines) - 1, "- reports/model_benchmark.csv")
         report_lines.insert(len(report_lines) - 1, "- reports/figures/model_comparison_cv.png")
+        report_lines.insert(len(report_lines) - 1, "- reports/figures/model_comparison_temporal_cv.png")
+        report_lines.insert(len(report_lines) - 1, "- reports/figures/model_comparison_sliding_temporal_cv.png")
     if best_params is not None:
         report_lines.insert(len(report_lines) - 1, f"- reports/{model_spec.slug}_best_params.json")
 
@@ -458,15 +711,21 @@ def cv_results_to_markdown(cv_results: pd.DataFrame) -> str:
 def benchmark_to_markdown(benchmark_df: pd.DataFrame) -> str:
     header = (
         "| model | holdout_accuracy | holdout_macro_f1 | holdout_weighted_f1 | "
-        "cv_accuracy_mean | cv_macro_f1_mean | cv_weighted_f1_mean | tuning_macro_f1 | best_params |"
+        "cv_accuracy_mean | cv_macro_f1_mean | cv_weighted_f1_mean | "
+        "temporal_cv_accuracy_mean | temporal_cv_macro_f1_mean | temporal_cv_weighted_f1_mean | "
+        "sliding_temporal_cv_accuracy_mean | sliding_temporal_cv_macro_f1_mean | sliding_temporal_cv_weighted_f1_mean | "
+        "tuning_macro_f1 | best_params |"
     )
-    separator = "| --- | --- | --- | --- | --- | --- | --- | --- | --- |"
+    separator = "| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |"
     rows = [header, separator]
     for row in benchmark_df.itertuples(index=False):
         rows.append(
             "| "
             f"{row.model} | {row.holdout_accuracy:.4f} | {row.holdout_macro_f1:.4f} | "
             f"{row.holdout_weighted_f1:.4f} | {row.cv_accuracy_mean:.4f} | "
-            f"{row.cv_macro_f1_mean:.4f} | {row.cv_weighted_f1_mean:.4f} | {row.tuning_macro_f1:.4f} | {row.best_params} |"
+            f"{row.cv_macro_f1_mean:.4f} | {row.cv_weighted_f1_mean:.4f} | "
+            f"{row.temporal_cv_accuracy_mean:.4f} | {row.temporal_cv_macro_f1_mean:.4f} | {row.temporal_cv_weighted_f1_mean:.4f} | "
+            f"{row.sliding_temporal_cv_accuracy_mean:.4f} | {row.sliding_temporal_cv_macro_f1_mean:.4f} | {row.sliding_temporal_cv_weighted_f1_mean:.4f} | "
+            f"{row.tuning_macro_f1:.4f} | {row.best_params} |"
         )
     return "\n".join(rows)
