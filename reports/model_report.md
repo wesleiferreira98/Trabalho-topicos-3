@@ -121,4 +121,6 @@ fe:51:35:71:8e:66       0.95      0.95      0.95        63
 - reports/figures/rf_feature_importance.png
 - reports/model_benchmark.csv
 - reports/figures/model_comparison_cv.png
+- reports/figures/model_comparison_temporal_cv.png
+- reports/figures/model_comparison_sliding_temporal_cv.png
 - reports/rf_best_params.json
