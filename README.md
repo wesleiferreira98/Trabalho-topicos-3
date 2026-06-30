@@ -177,17 +177,19 @@ Captura Wi-Fi (bruta)
                    reports/ + models/ + figures/
 ```
 
+O pipeline parte da captura Wi-Fi bruta, realiza o tratamento dos dados, agrega os frames em janelas comportamentais por dispositivo, aplica estratégias de validação temporal e estratificada, ajusta hiperparâmetros via `RandomizedSearchCV` e exporta modelos, relatórios e figuras.
+
 ### 4.2 Origem dos Dados
 
 Os dados foram obtidos por **captura passiva de tráfego Wi-Fi** em modo monitor, gerando arquivos `.cap` e `.pcapng` (disponíveis em `data/01 - Não-Tratados/`). Após extração e limpeza inicial, o dataset tratado foi consolidado em `data/02 - Tratados/processed_training2.csv`, com **642.163 frames brutos** e cinco colunas:
 
-| Coluna                         | Tipo     | Descrição                                    |
-|-------------------------------|----------|----------------------------------------------|
-| `frame.time_delta_displayed`  | float64  | Intervalo entre frames consecutivos (s)      |
-| `wlan.sa`                     | string   | Endereço MAC de origem (variável-alvo)       |
-| `wlan.da`                     | string   | Endereço MAC de destino                      |
-| `wlan.fc.pwrmgt`              | bool     | Sinalização de economy de energia            |
-| `frame.len`                   | int64    | Tamanho do frame em bytes                    |
+| Coluna                         | Tipo    | Descrição                              |
+| ------------------------------ | ------- | ---------------------------------------- |
+| `frame.time_delta_displayed` | float64 | Intervalo entre frames consecutivos (s)  |
+| `wlan.sa`                    | string  | Endereço MAC de origem (variável-alvo) |
+| `wlan.da`                    | string  | Endereço MAC de destino                 |
+| `wlan.fc.pwrmgt`             | bool    | Sinalização de economy de energia      |
+| `frame.len`                  | int64   | Tamanho do frame em bytes                |
 
 ### 4.3 Pré-processamento e Tratamento de Dados Ausentes
 
@@ -250,16 +252,17 @@ def build_device_windows(
 
 **Por que janelas de 100 pacotes:**
 
-| Tamanho | Total de janelas | Dispositivos com ≥ 10 janelas | Mínimo de janelas por dispositivo |
-|---------|-----------------|-------------------------------|----------------------------------|
-| 25      | 25.644          | 14                            | 8                                |
-| **100** | **6.418**       | **11**                        | **2**                            |
-| 200     | 3.213           | 11                            | 1                                |
-| 500     | 1.288           | 11                            | 1                                |
+| Tamanho       | Total de janelas                     | Dispositivos com ≥ 10 janelas | Mínimo de janelas por dispositivo |
+| ------------- | ------------------------------------ | ------------------------------ | ---------------------------------- |
+| 25            | 25.644                               | 14                             | 8                                  |
+| **100** | **6.418** (6.399 após filtro) | **11**                   | **2**                        |
+| 200           | 3.213                                | 11                             | 1                                  |
+| 500           | 1.288                                | 11                             | 1                                  |
 
 Janelas menores (25 pacotes) geram mais amostras, mas excluem dispositivos menos ativos do filtro mínimo (`MIN_WINDOWS_PER_DEVICE = 10`), reduzindo a cobertura de classes. Janelas maiores (≥ 200) preservam todas as classes, mas com poucas janelas por dispositivo, comprometendo a validação cruzada e o holdout temporal. O valor **100** representa um equilíbrio entre estabilidade estatística e volume de amostras.
 
 **Os 11 atributos gerados** cobrem:
+
 - Perfil de tamanho de frame: `frame_len_{mean,std,min,max}`
 - Cadência de transmissão: `iat_{mean,std,min,max}`
 - Comportamento energético: `pwrmgt_ratio`
@@ -312,21 +315,22 @@ A EDA completa está disponível em [`notebooks/01_eda.ipynb`](notebooks/01_eda.
 
 ### 5.1 Qualidade dos Dados
 
-Antes de qualquer tratamento, o CSV bruto possui **642.163 linhas** com **1.274 valores ausentes** distribuídos em três colunas. Após o `dropna()`, restam **640.889 frames** uma perda de apenas **0,20%**, confirmando que o tratamento atual não introduz viés relevante.
+Antes de qualquer tratamento, o CSV bruto possui **642.163 linhas** com **1.274 valores ausentes** distribuídos em três colunas. Após o `dropna()`, restam **640.889 frames**, uma perda de apenas **0,20%**, confirmando que o tratamento atual não introduz viés relevante.
 
 ### 5.2 Desbalanceamento entre Dispositivos
 
-O dataset cobre **15 dispositivos** com distribuição extremamente assimétrica:
+O dataset tratado contém **15 dispositivos** identificados inicialmente. Após o filtro `MIN_WINDOWS_PER_DEVICE = 10`, quatro dispositivos com menos de 10 janelas agregadas são excluídos, e o conjunto final de modelagem passa a cobrir **11 dispositivos** com distribuição extremamente assimétrica:
 
-| Métrica              | Valor         |
-|----------------------|---------------|
-| Dispositivo mais ativo  | 308.228 frames |
-| Dispositivo menos ativo | 196 frames    |
+| Métrica                   | Valor              |
+| -------------------------- | ------------------ |
+| Dispositivo mais ativo     | 308.228 frames     |
+| Dispositivo menos ativo    | 196 frames         |
 | Razão de desbalanceamento | **~1.573×** |
 
 ![Top dispositivos por frames](reports/figures/top_sources.png)
 
 **Impacto nas decisões:** esta razão de ~1.573× justifica três escolhas no pipeline:
+
 1. Uso de **Macro F1** (em vez de accuracy simples) como critério de tuning e comparação dá peso igual a todas as classes independentemente do tamanho.
 2. `class_weight="balanced"` no Random Forest e no SVM compensa o desbalanceamento durante o treino reescalando as perdas.
 3. Filtro `MIN_WINDOWS_PER_DEVICE = 10` remove 4 dispositivos com menos de 10 janelas, cujas classes teriam amostras insuficientes para qualquer avaliação robusta.
@@ -372,6 +376,7 @@ Os três classificadores foram definidos em [`src/model_specs.py`](src/model_spe
 **Funcionamento:** constrói um ensemble de árvores de decisão treinadas em subconjuntos aleatórios de amostras e features (bagging + feature randomness). A predição final é a votação da maioria das árvores.
 
 **Por que foi escolhido:** é o modelo principal do projeto por três razões:
+
 1. Captura relações não-lineares entre os atributos de fingerprint sem exigir transformações manuais.
 2. Fornece `feature_importances_`, permitindo interpretar quais atributos mais discriminam os dispositivos.
 3. É robusto a features em escalas diferentes não exige `StandardScaler`.
@@ -462,7 +467,7 @@ SVM_SPEC = ModelSpec(
 
 ### 7.1 Estratégia de Tuning
 
-Todos os modelos passaram por **`RandomizedSearchCV`** com `n_iter` iterações, `scoring="f1_macro"` e `cv=StratifiedKFold(n_splits=5, shuffle=True, random_state=42)`. A lógica está em [`src/iot_fingerprint/model_pipeline.py`](src/iot_fingerprint/model_pipeline.py):
+Todos os modelos passaram por **`RandomizedSearchCV`** com `scoring="f1_macro"` e validação cruzada interna de 5 folds estratificados (`StratifiedKFold(n_splits=5, shuffle=True, random_state=42)`). A lógica está em [`src/iot_fingerprint/model_pipeline.py`](src/iot_fingerprint/model_pipeline.py):
 
 ```python
 def tune_estimator(model_spec, x_train, y_train):
@@ -481,27 +486,98 @@ def tune_estimator(model_spec, x_train, y_train):
     return search.best_estimator_, search.best_params_, float(search.best_score_)
 ```
 
-**Por que `RandomizedSearchCV` e não `GridSearchCV`:** a busca aleatória explora o espaço de hiperparâmetros de forma mais eficiente com número de iterações fixo, especialmente quando o espaço é contínuo ou tem muitas combinações. Com `n_iter=10`, avalia 10 combinações aleatórias em vez de testar todas as combinações cartesianas.
+**Por que `RandomizedSearchCV` e não `GridSearchCV`:** a busca aleatória explora o espaço de hiperparâmetros de forma mais eficiente com número de iterações fixo. O espaço combinatório do Random Forest, por exemplo, possui 3 × 4 × 3 × 3 × 3 = 324 combinações possíveis; com `n_iter=10` exploram-se 10 combinações aleatórias com custo controlado.
 
-**Por que `f1_macro` como critério:** com 11 classes e desbalanceamento acentuado, a accuracy pode ser enganosa (modelo que acerta sempre a classe majoritária obtém accuracy alta). O Macro F1 pondera cada classe igualmente.
+**Por que `f1_macro` como critério:** com 11 classes e desbalanceamento de até ~1.573×, a accuracy pode ser enganosa. O Macro F1 pondera cada classe igualmente, independentemente do número de amostras, penalizando modelos que ignoram classes minoritárias.
 
-### 7.2 Hiperparâmetros Selecionados
+Os resultados completos de cada combinação testada estão salvos em `reports/rf_tuning_cv_results.csv`, `reports/knn_tuning_cv_results.csv` e `reports/svm_tuning_cv_results.csv`.
 
-| Modelo         | Hiperparâmetro         | Valor selecionado | Justificativa                                               |
-|---------------|------------------------|-------------------|-------------------------------------------------------------|
-| Random Forest | `n_estimators`         | 200               | Número de árvores: mais árvores reduzem variância, mas com retorno decrescente acima de ~200 para este dataset |
-| Random Forest | `max_depth`            | 10                | Limita a profundidade das árvores, reduzindo overfitting     |
-| Random Forest | `min_samples_split`    | 2                 | Número mínimo de amostras para dividir um nó                |
-| Random Forest | `min_samples_leaf`     | 1                 | Número mínimo de amostras por folha                         |
-| Random Forest | `max_features`         | `"log2"`          | Número de features consideradas por split: reduz correlação entre árvores |
-| KNN           | `n_neighbors`          | 7                 | Vizinhos: valor ímpar evita empate; 7 balanceia bias-variância neste dataset |
-| KNN           | `weights`              | `"distance"`      | Vizinhos mais próximos têm mais peso, favorece fronteiras locais precisas |
-| KNN           | `p`                    | 1                 | Distância de Manhattan (p=1), mais robusta a outliers que a euclidiana (p=2) |
-| SVM           | `C`                    | 10.0              | Penalidade de violação de margem: valor mais alto = margem mais rígida |
-| SVM           | `gamma`                | `"scale"`         | Escala automática: 1/(n_features × var(X)), evita necessidade de tuning manual |
-| SVM           | `kernel`               | `"rbf"`           | Kernel Gaussiano captura fronteiras não-lineares no espaço de features |
+### 7.2 Resultados da Busca de Hiperparâmetros
 
-Os arquivos com os parâmetros exatos estão em `reports/rf_best_params.json`, `reports/knn_best_params.json` e `reports/svm_best_params.json`.
+#### Random Forest (10 combinações testadas)
+
+> Melhor Macro F1 médio na busca (5-fold CV no treino): **0,9784**
+
+| #           | `n_estimators` | `max_depth` | `min_samples_split` | `min_samples_leaf` | `max_features` | Macro F1 médio  | Desvio padrão   |
+| ----------- | ---------------- | ------------- | --------------------- | -------------------- | ---------------- | ---------------- | ---------------- |
+| **1** | **200**    | **10**  | **2**           | **1**          | **log2**   | **0,9784** | **0,0077** |
+| 2           | 300              | 20            | 10                    | 1                    | log2             | 0,9778           | 0,0062           |
+| 3           | 200              | sem limite    | 2                     | 2                    | sqrt             | 0,9761           | 0,0079           |
+| 4           | 500              | 30            | 5                     | 4                    | sqrt             | 0,9742           | 0,0093           |
+| 5           | 200              | 20            | 2                     | 4                    | sqrt             | 0,9733           | 0,0097           |
+| 6           | 200              | 10            | 2                     | 4                    | log2             | 0,9722           | 0,0113           |
+| 7           | 200              | 10            | 10                    | 4                    | log2             | 0,9707           | 0,0104           |
+| 8           | 500              | 10            | 2                     | 1                    | sem limite       | 0,9669           | 0,0051           |
+| 9           | 200              | 20            | 5                     | 1                    | sem limite       | 0,9648           | 0,0038           |
+| 10          | 200              | 10            | 2                     | 2                    | sem limite       | 0,9643           | 0,0057           |
+
+**Observações:**
+
+- `max_features="log2"` supera `"sqrt"` e `None` (todas as features): restringir o número de features por split aumenta a diversidade entre árvores e reduz a correlação do ensemble.
+- `max_depth=10` equilibra capacidade e regularização: árvores sem limite de profundidade (`None`) na terceira posição já mostram desempenho inferior, indicando tendência ao overfitting.
+- `n_estimators=200` é suficiente: 300 e 500 árvores não superam 200 no melhor resultado, confirmando retorno decrescente acima desse valor para este dataset.
+- `min_samples_leaf=1` e `min_samples_split=2` (restrições mínimas) acompanham o melhor resultado pois, combinados com `max_depth=10`, a profundidade já controla o overfitting.
+
+#### KNN (8 combinações testadas)
+
+> Melhor Macro F1 médio na busca (5-fold CV no treino): **0,9450**
+
+| #           | `weights`        | `p` (distância)      | `n_neighbors` | Macro F1 médio  | Desvio padrão   |
+| ----------- | ------------------ | ----------------------- | --------------- | ---------------- | ---------------- |
+| **1** | **distance** | **1 (Manhattan)** | **7**     | **0,9450** | **0,0149** |
+| 2           | distance           | 1 (Manhattan)           | 3               | 0,9436           | 0,0115           |
+| 3           | distance           | 1 (Manhattan)           | 9               | 0,9418           | 0,0161           |
+| 4           | uniform            | 1 (Manhattan)           | 7               | 0,9415           | 0,0148           |
+| 5           | uniform            | 1 (Manhattan)           | 3               | 0,9398           | 0,0132           |
+| 6           | uniform            | 1 (Manhattan)           | 11              | 0,9379           | 0,0164           |
+| 7           | distance           | 2 (Euclidiana)          | 7               | 0,9224           | 0,0157           |
+| 8           | uniform            | 2 (Euclidiana)          | 11              | 0,9122           | 0,0152           |
+
+**Observações:**
+
+- **`p=1` (distância de Manhattan) é decisivo:** todas as 6 melhores combinações usam Manhattan; as 2 piores usam distância euclidiana (`p=2`). No espaço de features de fingerprint, onde `frame_len_mean` e `iat_mean` podem ter escalas e distribuições muito diferentes, Manhattan é menos sensível a outliers em dimensões individuais.
+- **`weights="distance"` supera `"uniform"` consistentemente:** o gradiente de peso pelos vizinhos mais próximos melhora a separação nas fronteiras de classe, especialmente relevante dado que dispositivos diferentes formam clusters de tamanhos desiguais.
+- **`k=7` é o ponto ótimo:** k=3 tem variância maior (std maior); k=9 e k=11 introduzem vizinhos de classes diferentes nas regiões de fronteira.
+
+#### SVM (8 combinações testadas)
+
+> Melhor Macro F1 médio na busca (5-fold CV no treino): **0,9550**
+
+| #           | `kernel`    | `gamma`       | `C`          | Macro F1 médio  | Desvio padrão   |
+| ----------- | ------------- | --------------- | -------------- | ---------------- | ---------------- |
+| **1** | **rbf** | **scale** | **10,0** | **0,9550** | **0,0086** |
+| 1           | rbf           | 0,1             | 10,0           | 0,9550           | 0,0086           |
+| 3           | rbf           | scale           | 1,0            | 0,9043           | 0,0145           |
+| 4           | poly          | scale           | 10,0           | 0,8854           | 0,0087           |
+| 5           | poly          | scale           | 3,0            | 0,8519           | 0,0130           |
+| 6           | poly          | 0,1             | 1,0            | 0,8337           | 0,0128           |
+| 6           | poly          | scale           | 1,0            | 0,8337           | 0,0128           |
+| 8           | poly          | 0,01            | 10,0           | 0,3775           | 0,0164           |
+
+**Observações:**
+
+- **Kernel RBF supera poly amplamente:** a maior diferença é de ~6 pontos percentuais entre o melhor `poly` (0,8854) e o melhor `rbf` (0,9550). O espaço de features de fingerprint não apresenta a estrutura polinomial que o kernel `poly` pressupõe.
+- **`C=10` é significativamente melhor que `C=1`:** a diferença de 0,9550 para 0,9043 com `rbf` mostra que uma margem mais rígida (maior penalidade por violações) beneficia este dataset, onde os clusters de dispositivos são bem separados mas com alguma sobreposição nas bordas.
+- **Empate entre `gamma="scale"` e `gamma=0,1`** no rank 1: `"scale"` equivale a `1 / (n_features × var(X))` e, para estas features normalizadas, produz valor próximo a 0,1. O scikit-learn selecionou `gamma="scale"` como o melhor parâmetro por ter aparecido primeiro na busca.
+- **`gamma=0,01` com poly colapsa para 0,3775:** kernel polinomial com gamma muito pequeno gera uma superfície de decisão quase linear, insuficiente para separar 11 dispositivos.
+
+### 7.3 Resumo dos Melhores Hiperparâmetros
+
+| Modelo        | Parâmetro            | Valor selecionado | Macro F1 da busca |
+| ------------- | --------------------- | ----------------- | ----------------- |
+| Random Forest | `n_estimators`      | 200               | **0,9784**  |
+| Random Forest | `max_depth`         | 10                |                   |
+| Random Forest | `min_samples_split` | 2                 |                   |
+| Random Forest | `min_samples_leaf`  | 1                 |                   |
+| Random Forest | `max_features`      | `"log2"`        |                   |
+| KNN           | `n_neighbors`       | 7                 | **0,9450**  |
+| KNN           | `weights`           | `"distance"`    |                   |
+| KNN           | `p`                 | 1 (Manhattan)     |                   |
+| SVM           | `kernel`            | `"rbf"`         | **0,9550**  |
+| SVM           | `C`                 | 10,0              |                   |
+| SVM           | `gamma`             | `"scale"`       |                   |
+
+Os arquivos com os parâmetros completos estão em `reports/rf_best_params.json`, `reports/knn_best_params.json` e `reports/svm_best_params.json`. Os resultados de todas as combinações testadas estão em `reports/rf_tuning_cv_results.csv`, `reports/knn_tuning_cv_results.csv` e `reports/svm_tuning_cv_results.csv`.
 
 ---
 
@@ -517,7 +593,7 @@ Para cada dispositivo, as janelas são ordenadas cronologicamente e divididas em
 
 #### Validação Cruzada Estratificada (5-Fold)
 
-As 6.399 janelas são divididas em 5 folds preservando a proporção de cada dispositivo. **Não impõe restrição temporal** serve como referência comparativa de desempenho máximo possível. O código está em `stratified_cv()` em `model_pipeline.py`.
+As 6.399 janelas são divididas em 5 folds preservando a proporção de cada dispositivo. **Não impõe restrição temporal**; serve como referência comparativa de desempenho máximo possível. O código está em `stratified_cv()` em `model_pipeline.py`.
 
 #### Validação Cruzada Temporal Expanding
 
@@ -556,11 +632,11 @@ def sliding_temporal_cv_splits(features, n_splits=5):
 
 ### 8.2 Métricas
 
-| Métrica      | Fórmula (simplificada)                               | Uso neste projeto                          |
-|-------------|------------------------------------------------------|--------------------------------------------|
-| Accuracy     | (predições corretas) / (total)                       | Referência geral, interpretada com cautela dado o desbalanceamento |
-| Macro F1     | média não-ponderada do F1 de cada classe             | **Critério principal** de tuning e comparação pondera classes iguais |
-| Weighted F1  | média do F1 ponderada pelo suporte de cada classe    | Referência complementar próxima à accuracy ponderada |
+| Métrica    | Fórmula (simplificada)                            | Uso neste projeto                                                             |
+| ----------- | -------------------------------------------------- | ----------------------------------------------------------------------------- |
+| Accuracy    | (predições corretas) / (total)                   | Referência geral, interpretada com cautela dado o desbalanceamento           |
+| Macro F1    | média não-ponderada do F1 de cada classe         | **Critério principal** de tuning e comparação pondera classes iguais |
+| Weighted F1 | média do F1 ponderada pelo suporte de cada classe | Referência complementar próxima à accuracy ponderada                       |
 
 O Macro F1 é a métrica prioritária porque, com 11 classes e razão de desbalanceamento de ~1.573×, uma accuracy alta pode ser obtida simplesmente acertando as classes majoritárias e errando sistematicamente as menores.
 
@@ -570,11 +646,11 @@ O Macro F1 é a métrica prioritária porque, com 11 classes e razão de desbala
 
 ### 9.1 Comparação Entre Modelos
 
-| Modelo         | Holdout<br>Macro F1 | CV Estrat.<br>Macro F1 | CV Temporal<br>Macro F1 | CV Sliding<br>Macro F1 | Tuning<br>Macro F1 |
-|---------------|--------------------|-----------------------|------------------------|------------------------|-------------------|
-| **Random Forest** | **0,9527**     | **0,9764**            | **0,9548**             | **0,9147**             | **0,9784**        |
-| SVM            | 0,9334            | 0,9525                | 0,9174                 | 0,8638                 | 0,9550            |
-| KNN            | 0,9444            | 0,9446                | 0,8927                 | 0,8688                 | 0,9450            |
+| Modelo                  | HoldoutMacro F1  | CV Estrat.Macro F1 | CV TemporalMacro F1 | CV SlidingMacro F1 | TuningMacro F1   |
+| ----------------------- | ---------------- | ------------------ | ------------------- | ------------------ | ---------------- |
+| **Random Forest** | **0,9527** | **0,9764**   | **0,9548**    | **0,9147**   | **0,9784** |
+| SVM                     | 0,9334           | 0,9525             | 0,9174              | 0,8638             | 0,9550           |
+| KNN                     | 0,9444           | 0,9446             | 0,8927              | 0,8688             | 0,9450           |
 
 ![Comparação entre modelos CV estratificada](reports/figures/model_comparison_cv.png)
 ![Comparação entre modelos CV temporal](reports/figures/model_comparison_temporal_cv.png)
@@ -586,7 +662,7 @@ O Macro F1 é a métrica prioritária porque, com 11 classes e razão de desbala
 
 ![Importância das features Random Forest](reports/figures/rf_feature_importance.png)
 
-**A degradação de desempenho do holdout para o sliding não é um problema é esperada e desejada metodologicamente.** O protocolo sliding restringe o histórico de treino a uma janela recente fixa, simulando um cenário de adaptação contínua com memória limitada. O Random Forest cai de Macro F1 = 0,9764 (CV estratificada) para 0,9147 (CV sliding) uma diferença de ~6 pontos percentuais que demonstra que o modelo é sensível à quantidade de histórico disponível.
+**A degradação de desempenho do holdout para o sliding não é um problema; ela é esperada e metodologicamente informativa.** O protocolo sliding restringe o histórico de treino a uma janela recente fixa, simulando um cenário de adaptação contínua com memória limitada. O Random Forest cai de Macro F1 = 0,9764 (CV estratificada) para 0,9147 (CV sliding), uma diferença de ~6 pontos percentuais que demonstra a sensibilidade do modelo à quantidade de histórico disponível.
 
 **O KNN degrada mais sob restrições temporais** do que o RF ou SVM. Isso é esperado: com menos janelas de treino por fold no protocolo sliding, os vizinhos mais próximos passam a representar um histórico menor e menos representativo da variabilidade de cada dispositivo.
 
@@ -606,14 +682,14 @@ Os erros de classificação mais frequentes ocorrem entre dispositivos com pouco
 
 ## 10. Limitações
 
-| Limitação | Descrição | Impacto |
-|-----------|-----------|---------|
-| **Escopo do alvo** | O modelo classifica dispositivos **observados no conjunto analisado** (11 MACs de origem). Não generaliza para dispositivos nunca vistos. | Não pode ser usado diretamente como detector universal de tipo de dispositivo. |
-| **Dependência do ambiente de captura** | Com apenas 38 destinos distintos em todo o dataset, o atributo `unique_destinations` pode refletir a topologia da rede de captura tanto quanto o comportamento do dispositivo. | Risco de baixa transferabilidade para redes com infraestrutura diferente. |
-| **Desbalanceamento residual** | Mesmo com Macro F1 e `class_weight="balanced"`, classes com poucas janelas têm menor precisão nas matrizes de confusão. | Erros concentrados nos dispositivos menos ativos. |
-| **Granularidade fixa de janela** | A janela de 100 pacotes é uma escolha de projeto. Outra granularidade altera o equilíbrio entre estabilidade estatística e sensibilidade a mudanças de comportamento. | Resultados específicos a essa configuração. |
-| **Dataset único** | Uma única sessão de captura em um único ambiente. Variações de dia, horário, topologia ou conjunto de dispositivos não foram avaliadas. | Generalização para outros ambientes deve ser tratada com cautela. |
-| **Ausência de dispositivos novos** | A validação temporal melhora o rigor, mas não equivale a avaliar o modelo contra MACs nunca vistos no treino. | O cenário de "dispositivo desconhecido" não foi abordado. |
+| Limitação                                   | Descrição                                                                                                                                                                     | Impacto                                                                         |
+| --------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------- |
+| **Escopo do alvo**                      | O modelo classifica dispositivos **observados no conjunto analisado** (11 MACs de origem). Não generaliza para dispositivos nunca vistos.                               | Não pode ser usado diretamente como detector universal de tipo de dispositivo. |
+| **Dependência do ambiente de captura** | Com apenas 38 destinos distintos em todo o dataset, o atributo`unique_destinations` pode refletir a topologia da rede de captura tanto quanto o comportamento do dispositivo. | Risco de baixa transferabilidade para redes com infraestrutura diferente.       |
+| **Desbalanceamento residual**           | Mesmo com Macro F1 e`class_weight="balanced"`, classes com poucas janelas têm menor precisão nas matrizes de confusão.                                                     | Erros concentrados nos dispositivos menos ativos.                               |
+| **Granularidade fixa de janela**        | A janela de 100 pacotes é uma escolha de projeto. Outra granularidade altera o equilíbrio entre estabilidade estatística e sensibilidade a mudanças de comportamento.       | Resultados específicos a essa configuração.                                  |
+| **Dataset único**                      | Uma única sessão de captura em um único ambiente. Variações de dia, horário, topologia ou conjunto de dispositivos não foram avaliadas.                                  | Generalização para outros ambientes deve ser tratada com cautela.             |
+| **Ausência de dispositivos novos**     | A validação temporal melhora o rigor, mas não equivale a avaliar o modelo contra MACs nunca vistos no treino.                                                                | O cenário de "dispositivo desconhecido" não foi abordado.                     |
 
 ---
 
@@ -621,7 +697,7 @@ Os erros de classificação mais frequentes ocorrem entre dispositivos com pouco
 
 ### 11.1 Conclusão
 
-O projeto demonstrou que é possível identificar dispositivos IoT por fingerprint passivo de tráfego Wi-Fi com desempenho elevado, desde que os dados sejam devidamente tratados e agregados em janelas estatísticas. O pipeline construído de ponta a ponta, desde o CSV bruto até os artefatos de modelo é reprodutível, documentado e academicamente defensável.
+O projeto demonstrou que é possível identificar dispositivos IoT por fingerprint passivo de tráfego Wi-Fi com desempenho elevado, desde que os dados sejam devidamente tratados e agregados em janelas estatísticas. O pipeline construído de ponta a ponta, do CSV bruto aos artefatos de modelo, é reprodutível, documentado e sustentado por escolhas metodológicas explicitadas ao longo do projeto.
 
 O Random Forest foi o classificador com melhor desempenho em todos os quatro protocolos de validação, atingindo Macro F1 de **0,9527 no holdout temporal**, **0,9764 na CV estratificada** e **0,9147 na CV temporal sliding** o protocolo mais rigoroso. A superioridade consistente do RF sobre KNN e SVM foi confirmada empiricamente, não arbitrariamente.
 
@@ -635,3 +711,4 @@ A principal contribuição metodológica é a combinação de quatro protocolos 
 - **Adaptação contínua:** dado que a performance cai no protocolo sliding (memória limitada), investigar estratégias de retreino online ou ensemble incremental para manter o desempenho ao longo do tempo.
 - **Múltiplas capturas:** ampliar o dataset com mais sessões de captura de diferentes dispositivos IoT comerciais para melhorar a representatividade e a generalização.
 - **Integração com o pipeline de segurança:** conectar a saída do classificador a sistemas de inventário de rede ou SIEM para uso em produção, o que está fora do escopo atual (identificação apenas, sem regras de segurança ou detecção de anomalias).
+
