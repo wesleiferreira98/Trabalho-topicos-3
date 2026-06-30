@@ -1,6 +1,6 @@
 # Identificação de Dispositivos IoT por Fingerprint de Tráfego Wi-Fi
 
-Pipeline de aprendizado de máquina supervisionado que identifica dispositivos IoT conectados a uma rede Wi-Fi com base em padrões comportamentais extraídos do tráfego capturado sem depender de inspeção profunda de pacotes, credenciais ou interação com os dispositivos.
+Pipeline de aprendizado de máquina supervisionado que identifica dispositivos IoT conectados a uma rede Wi-Fi com base em padrões comportamentais extraídos do tráfego capturado sem depender de inspeção profunda de pacotes, credenciais ou interação com os dispositivos. Esse trabalho faz parte da disciplina de Tópicos em Inteligência Computacional III do PGCOMP/UFBA.
 
 ---
 
