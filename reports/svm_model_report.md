@@ -1,15 +1,15 @@
-# Relatorio Consolidado - SVM
+# Relatório Consolidado - SVM
 
 ## Resumo Executivo
 - Linhas tratadas: 640889
 - Dispositivos de origem: 15
 - Janelas usadas no modelo: 6399
-- Acuracia media da CV estratificada: 0.9612
-- Macro F1 medio da CV estratificada: 0.9525
-- Acuracia media da CV temporal: 0.9502
-- Macro F1 medio da CV temporal: 0.9174
-- Acuracia media da CV temporal sliding: 0.9152
-- Macro F1 medio da CV temporal sliding: 0.8638
+- Acurácia média da CV estratificada: 0.9612
+- Macro F1 médio da CV estratificada: 0.9525
+- Acurácia média da CV temporal: 0.9502
+- Macro F1 médio da CV temporal: 0.9174
+- Acurácia média da CV temporal sliding: 0.9152
+- Macro F1 médio da CV temporal sliding: 0.8638
 
 ## EDA
 ```text
@@ -17,8 +17,8 @@ Linhas tratadas: 640889
 Dispositivos de origem: 15
 Dispositivos com janelas suficientes: 11
 Janelas agregadas: 6399
-Frame len medio: 72.797
-IAT medio: 0.015586
+Frame len médio: 72.797
+IAT médio: 0.015586
 Top 10 MACs de origem:
 - 4c:a9:19:e9:7e:af: 308228
 - e0:01:c7:56:19:0c: 113411
@@ -32,7 +32,7 @@ Top 10 MACs de origem:
 - bc:bd:84:f0:4a:33: 11680
 ```
 
-## Treino e Validacao
+## Treino e Validação
 ### Holdout temporal por dispositivo
 ```text
 precision    recall  f1-score   support
@@ -54,7 +54,7 @@ fe:51:35:71:8e:66       0.94      0.97      0.95        63
      weighted avg       0.97      0.97      0.97      1283
 ```
 
-### Validacao cruzada estratificada
+### Validação cruzada estratificada
 | fold | train_windows | test_windows | accuracy | macro_f1 | weighted_f1 |
 | --- | --- | --- | --- | --- | --- |
 | 1 | 5119 | 1280 | 0.9648 | 0.9575 | 0.9656 |
@@ -63,7 +63,7 @@ fe:51:35:71:8e:66       0.94      0.97      0.95        63
 | 4 | 5119 | 1280 | 0.9641 | 0.9441 | 0.9647 |
 | 5 | 5120 | 1279 | 0.9609 | 0.9519 | 0.9617 |
 
-### Validacao cruzada temporal
+### Validação cruzada temporal
 | fold | train_windows | test_windows | accuracy | macro_f1 | weighted_f1 |
 | --- | --- | --- | --- | --- | --- |
 | 1 | 1062 | 1068 | 0.9213 | 0.8808 | 0.9222 |
@@ -72,7 +72,7 @@ fe:51:35:71:8e:66       0.94      0.97      0.95        63
 | 4 | 4262 | 1065 | 0.9512 | 0.9097 | 0.9491 |
 | 5 | 5327 | 1072 | 0.9646 | 0.9292 | 0.9655 |
 
-### Validacao cruzada temporal sliding
+### Validação cruzada temporal sliding
 | fold | train_windows | test_windows | accuracy | macro_f1 | weighted_f1 |
 | --- | --- | --- | --- | --- | --- |
 | 1 | 1062 | 1068 | 0.9213 | 0.8808 | 0.9222 |
@@ -81,8 +81,8 @@ fe:51:35:71:8e:66       0.94      0.97      0.95        63
 | 4 | 1066 | 1065 | 0.9211 | 0.8522 | 0.9194 |
 | 5 | 1065 | 1072 | 0.8703 | 0.7854 | 0.8750 |
 
-### Hiperparametros selecionados automaticamente
-- Melhor macro F1 medio na busca: 0.9550
+### Hiperparâmetros selecionados automaticamente
+- Melhor macro F1 médio na busca: 0.9550
 - model__kernel: rbf
 - model__gamma: scale
 - model__C: 10.0

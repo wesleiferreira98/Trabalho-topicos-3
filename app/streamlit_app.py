@@ -61,7 +61,7 @@ def load_model_benchmark() -> pd.DataFrame | None:
 def load_report_markdowns() -> dict[str, str]:
 	reports = {
 		"Consolidado": REPORTS_DIR / "model_report.md",
-		"Academico": REPORTS_DIR / "academic_report.md",
+		"Acadêmico": REPORTS_DIR / "academic_report.md",
 	}
 	loaded_reports: dict[str, str] = {}
 	for label, path in reports.items():
@@ -74,7 +74,7 @@ def show_figure(path: Path, caption: str) -> None:
 	if path.exists():
 		st.image(str(path), caption=caption, width="stretch")
 	else:
-		st.info(f"Figura ainda nao gerada: {path.name}")
+		st.info(f"Figura ainda não gerada: {path.name}")
 
 df = load_processed_training()
 cv_results = load_cv_results()
@@ -87,8 +87,8 @@ if cv_results is not None:
 	metric_cols = st.columns(5)
 	metric_cols[0].metric("Frames tratados", f"{len(df):,}")
 	metric_cols[1].metric("Dispositivos de origem", df["wlan.sa"].nunique())
-	metric_cols[2].metric("Accuracy media CV estrat.", f"{cv_results['accuracy'].mean():.4f}")
-	metric_cols[3].metric("Macro F1 medio CV estrat.", f"{cv_results['macro_f1'].mean():.4f}")
+	metric_cols[2].metric("Accuracy média CV estrat.", f"{cv_results['accuracy'].mean():.4f}")
+	metric_cols[3].metric("Macro F1 médio CV estrat.", f"{cv_results['macro_f1'].mean():.4f}")
 	if benchmark_df is not None:
 		best_model = benchmark_df.sort_values("cv_macro_f1_mean", ascending=False).iloc[0]
 		metric_cols[4].metric("Melhor modelo", str(best_model["model"]))
@@ -98,7 +98,7 @@ else:
 	metric_cols[1].metric("Dispositivos de origem", df["wlan.sa"].nunique())
 
 overview_tab, eda_tab, model_tab, report_tab = st.tabs(
-	["Visao Geral", "EDA", "Modelo", "Relatorio"]
+	["Visão Geral", "EDA", "Modelo", "Relatório"]
 )
 
 with overview_tab:
@@ -107,7 +107,7 @@ with overview_tab:
 		st.subheader("Top MACs de origem")
 		st.dataframe(df["wlan.sa"].value_counts().head(20).rename("frames"))
 
-		st.subheader("Distribuicao de Power Management")
+		st.subheader("Distribuição de Power Management")
 		power_management_counts = (
 			df["wlan.fc.pwrmgt"]
 			.astype("Int64")
@@ -137,39 +137,39 @@ with overview_tab:
 		st.dataframe(features.head(100), width="stretch")
 
 with eda_tab:
-	st.subheader("Figuras exploratorias")
+	st.subheader("Figuras exploratórias")
 	show_figure(FIGURES_DIR / "top_sources.png", "Top 15 dispositivos por frames")
-	show_figure(FIGURES_DIR / "power_management_distribution.png", "Distribuicao de power management")
-	show_figure(FIGURES_DIR / "frame_length_by_device.png", "Distribuicao do tamanho dos frames")
-	show_figure(FIGURES_DIR / "window_feature_scatter.png", "Separacao de dispositivos no espaco de features")
-	show_figure(FIGURES_DIR / "feature_correlation_heatmap.png", "Correlacao entre features agregadas")
+	show_figure(FIGURES_DIR / "power_management_distribution.png", "Distribuição de power management")
+	show_figure(FIGURES_DIR / "frame_length_by_device.png", "Distribuição do tamanho dos frames")
+	show_figure(FIGURES_DIR / "window_feature_scatter.png", "Separação de dispositivos no espaço de features")
+	show_figure(FIGURES_DIR / "feature_correlation_heatmap.png", "Correlação entre features agregadas")
 
 with model_tab:
-	st.subheader("Validacao e interpretabilidade")
+	st.subheader("Validação e interpretabilidade")
 	if cv_results is not None:
-		st.caption("A validacao cruzada usa Stratified K-Fold para preservar a distribuicao das classes em cada fold.")
+		st.caption("A validação cruzada usa Stratified K-Fold para preservar a distribuição das classes em cada fold.")
 		st.dataframe(cv_results, width="stretch")
 		st.line_chart(cv_results.set_index("fold")[["accuracy", "macro_f1", "weighted_f1"]])
 	else:
-		st.info("Rode src/train_rf.py para gerar as metricas de validacao.")
+		st.info("Rode src/train_rf.py para gerar as métricas de validação.")
 
-	st.subheader("Validacao temporal")
+	st.subheader("Validação temporal")
 	if temporal_cv_results is not None:
-		st.caption("A CV temporal expanding treina com historico acumulado e testa no bloco futuro seguinte de cada dispositivo.")
+		st.caption("A CV temporal expanding treina com histórico acumulado e testa no bloco futuro seguinte de cada dispositivo.")
 		st.dataframe(temporal_cv_results, width="stretch")
 		st.line_chart(temporal_cv_results.set_index("fold")[["accuracy", "macro_f1", "weighted_f1"]])
 	else:
 		st.info("Rode src/train_rf.py para gerar reports/temporal_cv_results.csv.")
 
-	st.subheader("Validacao temporal sliding")
+	st.subheader("Validação temporal sliding")
 	if sliding_temporal_cv_results is not None:
-		st.caption("A CV temporal sliding treina em uma janela fixa recente e testa no bloco futuro seguinte, sem acumular todo o historico.")
+		st.caption("A CV temporal sliding treina em uma janela fixa recente e testa no bloco futuro seguinte, sem acumular todo o histórico.")
 		st.dataframe(sliding_temporal_cv_results, width="stretch")
 		st.line_chart(sliding_temporal_cv_results.set_index("fold")[["accuracy", "macro_f1", "weighted_f1"]])
 	else:
 		st.info("Rode src/train_rf.py para gerar reports/sliding_temporal_cv_results.csv.")
 
-	st.subheader("Comparacao entre algoritmos")
+	st.subheader("Comparação entre algoritmos")
 	if benchmark_df is not None:
 		display_benchmark = benchmark_df.copy()
 		if "best_params" in display_benchmark.columns:
@@ -177,42 +177,42 @@ with model_tab:
 				lambda params: ", ".join(f"{key}={value}" for key, value in params.items()) if params else "-"
 			)
 		st.dataframe(display_benchmark, width="stretch")
-		show_figure(FIGURES_DIR / "model_comparison_cv.png", "Comparacao entre Random Forest, KNN e SVM")
+		show_figure(FIGURES_DIR / "model_comparison_cv.png", "Comparação entre Random Forest, KNN e SVM")
 		show_figure(
 			FIGURES_DIR / "model_comparison_temporal_cv.png",
-			"Comparacao entre Random Forest, KNN e SVM na CV temporal",
+			"Comparação entre Random Forest, KNN e SVM na CV temporal",
 		)
 		show_figure(
 			FIGURES_DIR / "model_comparison_sliding_temporal_cv.png",
-			"Comparacao entre Random Forest, KNN e SVM na CV temporal sliding",
+			"Comparação entre Random Forest, KNN e SVM na CV temporal sliding",
 		)
 
 		if {"model", "tuning_macro_f1", "best_params"}.issubset(benchmark_df.columns):
-			st.subheader("Hiperparametros selecionados automaticamente")
+			st.subheader("Hiperparâmetros selecionados automaticamente")
 			model_cols = st.columns(len(benchmark_df))
 			for column, row in zip(model_cols, benchmark_df.itertuples(index=False), strict=False):
 				with column:
 					st.markdown(f"**{row.model}**")
-					st.metric("Macro F1 medio da busca", f"{row.tuning_macro_f1:.4f}")
+					st.metric("Macro F1 médio da busca", f"{row.tuning_macro_f1:.4f}")
 					st.json(row.best_params)
 	else:
 		st.info("Rode src/train_rf.py para gerar reports/model_benchmark.csv.")
 
-	show_figure(FIGURES_DIR / "rf_confusion_matrix.png", "Matriz de confusao do modelo")
-	show_figure(FIGURES_DIR / "rf_feature_importance.png", "Importancia das features")
-	show_figure(FIGURES_DIR / "rf_cv_metrics_by_fold.png", "Evolucao das metricas por fold da CV estratificada")
-	show_figure(FIGURES_DIR / "rf_temporal_cv_metrics_by_fold.png", "Evolucao das metricas por fold da CV temporal")
-	show_figure(FIGURES_DIR / "rf_sliding_temporal_cv_metrics_by_fold.png", "Evolucao das metricas por fold da CV temporal sliding")
+	show_figure(FIGURES_DIR / "rf_confusion_matrix.png", "Matriz de confusão do modelo")
+	show_figure(FIGURES_DIR / "rf_feature_importance.png", "Importância das features")
+	show_figure(FIGURES_DIR / "rf_cv_metrics_by_fold.png", "Evolução das métricas por fold da CV estratificada")
+	show_figure(FIGURES_DIR / "rf_temporal_cv_metrics_by_fold.png", "Evolução das métricas por fold da CV temporal")
+	show_figure(FIGURES_DIR / "rf_sliding_temporal_cv_metrics_by_fold.png", "Evolução das métricas por fold da CV temporal sliding")
 
 with report_tab:
-	st.subheader("Relatorios")
+	st.subheader("Relatórios")
 	if report_markdowns:
 		report_label = st.radio(
-			"Selecione a versao do relatorio",
+			"Selecione a versão do relatório",
 			options=list(report_markdowns.keys()),
 			horizontal=True,
 		)
 		st.markdown(report_markdowns[report_label])
 	else:
-		st.info("Gere reports/model_report.md ou reports/academic_report.md para visualizar o relatorio.")
+		st.info("Gere reports/model_report.md ou reports/academic_report.md para visualizar o relatório.")
 

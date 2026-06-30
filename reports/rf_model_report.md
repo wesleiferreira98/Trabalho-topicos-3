@@ -1,15 +1,15 @@
-# Relatorio Consolidado - Random Forest
+# Relatório Consolidado - Random Forest
 
 ## Resumo Executivo
 - Linhas tratadas: 640889
 - Dispositivos de origem: 15
 - Janelas usadas no modelo: 6399
-- Acuracia media da CV estratificada: 0.9823
-- Macro F1 medio da CV estratificada: 0.9764
-- Acuracia media da CV temporal: 0.9743
-- Macro F1 medio da CV temporal: 0.9548
-- Acuracia media da CV temporal sliding: 0.9599
-- Macro F1 medio da CV temporal sliding: 0.9147
+- Acurácia média da CV estratificada: 0.9823
+- Macro F1 médio da CV estratificada: 0.9764
+- Acurácia média da CV temporal: 0.9743
+- Macro F1 médio da CV temporal: 0.9548
+- Acurácia média da CV temporal sliding: 0.9599
+- Macro F1 médio da CV temporal sliding: 0.9147
 
 ## EDA
 ```text
@@ -17,8 +17,8 @@ Linhas tratadas: 640889
 Dispositivos de origem: 15
 Dispositivos com janelas suficientes: 11
 Janelas agregadas: 6399
-Frame len medio: 72.797
-IAT medio: 0.015586
+Frame len médio: 72.797
+IAT médio: 0.015586
 Top 10 MACs de origem:
 - 4c:a9:19:e9:7e:af: 308228
 - e0:01:c7:56:19:0c: 113411
@@ -32,7 +32,7 @@ Top 10 MACs de origem:
 - bc:bd:84:f0:4a:33: 11680
 ```
 
-## Treino e Validacao
+## Treino e Validação
 ### Holdout temporal por dispositivo
 ```text
 precision    recall  f1-score   support
@@ -54,7 +54,7 @@ fe:51:35:71:8e:66       0.95      0.95      0.95        63
      weighted avg       0.97      0.97      0.97      1283
 ```
 
-### Validacao cruzada estratificada
+### Validação cruzada estratificada
 | fold | train_windows | test_windows | accuracy | macro_f1 | weighted_f1 |
 | --- | --- | --- | --- | --- | --- |
 | 1 | 5119 | 1280 | 0.9875 | 0.9818 | 0.9876 |
@@ -63,7 +63,7 @@ fe:51:35:71:8e:66       0.95      0.95      0.95        63
 | 4 | 5119 | 1280 | 0.9797 | 0.9625 | 0.9795 |
 | 5 | 5120 | 1279 | 0.9844 | 0.9814 | 0.9844 |
 
-### Validacao cruzada temporal
+### Validação cruzada temporal
 | fold | train_windows | test_windows | accuracy | macro_f1 | weighted_f1 |
 | --- | --- | --- | --- | --- | --- |
 | 1 | 1062 | 1068 | 0.9625 | 0.9295 | 0.9611 |
@@ -72,7 +72,7 @@ fe:51:35:71:8e:66       0.95      0.95      0.95        63
 | 4 | 4262 | 1065 | 0.9765 | 0.9655 | 0.9766 |
 | 5 | 5327 | 1072 | 0.9757 | 0.9522 | 0.9752 |
 
-### Validacao cruzada temporal sliding
+### Validação cruzada temporal sliding
 | fold | train_windows | test_windows | accuracy | macro_f1 | weighted_f1 |
 | --- | --- | --- | --- | --- | --- |
 | 1 | 1062 | 1068 | 0.9625 | 0.9295 | 0.9611 |
@@ -81,15 +81,15 @@ fe:51:35:71:8e:66       0.95      0.95      0.95        63
 | 4 | 1066 | 1065 | 0.9408 | 0.8415 | 0.9314 |
 | 5 | 1065 | 1072 | 0.9524 | 0.8858 | 0.9494 |
 
-### Hiperparametros selecionados automaticamente
-- Melhor macro F1 medio na busca: 0.9784
+### Hiperparâmetros selecionados automaticamente
+- Melhor macro F1 médio na busca: 0.9784
 - n_estimators: 200
 - min_samples_split: 2
 - min_samples_leaf: 1
 - max_features: log2
 - max_depth: 10
 
-### Comparacao entre algoritmos
+### Comparação entre algoritmos
 | model | holdout_accuracy | holdout_macro_f1 | holdout_weighted_f1 | cv_accuracy_mean | cv_macro_f1_mean | cv_weighted_f1_mean | temporal_cv_accuracy_mean | temporal_cv_macro_f1_mean | temporal_cv_weighted_f1_mean | sliding_temporal_cv_accuracy_mean | sliding_temporal_cv_macro_f1_mean | sliding_temporal_cv_weighted_f1_mean | tuning_macro_f1 | best_params |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | Random Forest | 0.9743 | 0.9527 | 0.9739 | 0.9823 | 0.9764 | 0.9824 | 0.9743 | 0.9548 | 0.9740 | 0.9599 | 0.9147 | 0.9570 | 0.9784 | {"max_depth": 10, "max_features": "log2", "min_samples_leaf": 1, "min_samples_split": 2, "n_estimators": 200} |

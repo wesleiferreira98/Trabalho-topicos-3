@@ -14,7 +14,7 @@ def main() -> None:
     print("Power management:")
     print(df["wlan.fc.pwrmgt"].value_counts())
     print()
-    print("Resumo numerico:")
+    print("Resumo numérico:")
     print(df[["frame.time_delta_displayed", "frame.len"]].describe())
 
 

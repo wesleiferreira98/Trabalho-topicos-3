@@ -312,7 +312,25 @@ def tune_estimator(
         refit=True,
     )
     search.fit(x_train, y_train)
+    _save_tuning_results(model_spec, search)
     return search.best_estimator_, search.best_params_, float(search.best_score_)
+
+
+def _save_tuning_results(model_spec: ModelSpec, search: RandomizedSearchCV) -> None:
+    results = search.cv_results_
+    param_cols = {
+        key: results[key]
+        for key in results
+        if key.startswith("param_")
+    }
+    tuning_df = pd.DataFrame(param_cols)
+    tuning_df.columns = [col.removeprefix("param_") for col in tuning_df.columns]
+    tuning_df["mean_macro_f1"] = results["mean_test_score"]
+    tuning_df["std_macro_f1"] = results["std_test_score"]
+    tuning_df["rank"] = results["rank_test_score"]
+    tuning_df = tuning_df.sort_values("rank").reset_index(drop=True)
+    REPORTS_DIR.mkdir(parents=True, exist_ok=True)
+    tuning_df.to_csv(REPORTS_DIR / f"{model_spec.slug}_tuning_cv_results.csv", index=False)
 
 
 def run_training_pipeline(
@@ -334,12 +352,12 @@ def run_training_pipeline(
         f"{len(x_test)} janelas de teste"
     )
     print(classification_report(y_test, predictions))
-    print("Matriz de confusao:")
+    print("Matriz de confusão:")
     print(confusion_matrix(y_test, predictions, labels=list(estimator.classes_)))
     if best_params is not None:
-        print("Melhores hiperparametros:")
+        print("Melhores hiperparâmetros:")
         print(best_params)
-        print(f"Melhor macro F1 medio na busca: {best_cv_score:.4f}")
+        print(f"Melhor macro F1 médio na busca: {best_cv_score:.4f}")
 
     importances = None
     if model_spec.supports_feature_importance:
@@ -350,25 +368,25 @@ def run_training_pipeline(
     cv_results = stratified_cv(features, estimator)
     temporal_cv_results = temporal_cv(features, estimator)
     sliding_temporal_cv_results = sliding_temporal_cv(features, estimator)
-    print("Validacao cruzada estratificada:")
+    print("Validação cruzada estratificada:")
     print(cv_results.to_string(index=False, float_format=lambda value: f"{value:.4f}"))
-    print("Media CV estratificada:")
+    print("Média CV estratificada:")
     print(
         cv_results[["accuracy", "macro_f1", "weighted_f1"]]
         .mean()
         .to_string(float_format=lambda value: f"{value:.4f}")
     )
-    print("Validacao cruzada temporal:")
+    print("Validação cruzada temporal:")
     print(temporal_cv_results.to_string(index=False, float_format=lambda value: f"{value:.4f}"))
-    print("Media CV temporal:")
+    print("Média CV temporal:")
     print(
         temporal_cv_results[["accuracy", "macro_f1", "weighted_f1"]]
         .mean()
         .to_string(float_format=lambda value: f"{value:.4f}")
     )
-    print("Validacao cruzada temporal sliding:")
+    print("Validação cruzada temporal sliding:")
     print(sliding_temporal_cv_results.to_string(index=False, float_format=lambda value: f"{value:.4f}"))
-    print("Media CV temporal sliding:")
+    print("Média CV temporal sliding:")
     print(
         sliding_temporal_cv_results[["accuracy", "macro_f1", "weighted_f1"]]
         .mean()
@@ -378,7 +396,7 @@ def run_training_pipeline(
     benchmark_df = None
     if benchmark_specs:
         benchmark_df = benchmark_models(benchmark_specs, features, x_train, y_train, x_test, y_test)
-        print("Comparacao entre modelos:")
+        print("Comparação entre modelos:")
         print(benchmark_df.to_string(index=False, float_format=lambda value: f"{value:.4f}"))
 
     save_confusion_matrix_figure(model_spec, y_test, pd.Series(predictions), list(estimator.classes_))
@@ -454,7 +472,7 @@ def save_model_outputs(
         save_model_comparison_figure(
             benchmark_df,
             value_vars=["cv_accuracy_mean", "cv_macro_f1_mean", "cv_weighted_f1_mean"],
-            title="Comparacao entre modelos na CV estratificada",
+            title="Comparação entre modelos na CV estratificada",
             output_name="model_comparison_cv.png",
         )
         save_model_comparison_figure(
@@ -464,7 +482,7 @@ def save_model_outputs(
                 "temporal_cv_macro_f1_mean",
                 "temporal_cv_weighted_f1_mean",
             ],
-            title="Comparacao entre modelos na CV temporal",
+            title="Comparação entre modelos na CV temporal",
             output_name="model_comparison_temporal_cv.png",
         )
         save_model_comparison_figure(
@@ -474,7 +492,7 @@ def save_model_outputs(
                 "sliding_temporal_cv_macro_f1_mean",
                 "sliding_temporal_cv_weighted_f1_mean",
             ],
-            title="Comparacao entre modelos na CV temporal sliding",
+            title="Comparação entre modelos na CV temporal sliding",
             output_name="model_comparison_sliding_temporal_cv.png",
         )
     write_consolidated_report(
@@ -503,7 +521,7 @@ def save_confusion_matrix_figure(
     FIGURES_DIR.mkdir(parents=True, exist_ok=True)
     plt.figure(figsize=(11, 9))
     sns.heatmap(cm, cmap="Blues", annot=True, fmt="d", xticklabels=labels, yticklabels=labels)
-    plt.title(f"Matriz de confusao do {model_spec.name}")
+    plt.title(f"Matriz de confusão do {model_spec.name}")
     plt.xlabel("Predito")
     plt.ylabel("Real")
     plt.tight_layout()
@@ -516,8 +534,8 @@ def save_feature_importance_figure(model_spec: ModelSpec, importances: pd.Series
     ordered = importances.sort_values(ascending=True)
     plt.figure(figsize=(10, 6))
     ordered.plot(kind="barh", color="#2a9d8f")
-    plt.title(f"Importancia das features no {model_spec.name}")
-    plt.xlabel("Importancia")
+    plt.title(f"Importância das features no {model_spec.name}")
+    plt.xlabel("Importância")
     plt.ylabel("Feature")
     plt.tight_layout()
     plt.savefig(FIGURES_DIR / f"{model_spec.slug}_feature_importance.png", dpi=200)
@@ -542,9 +560,9 @@ def save_cv_metrics_figure(
     upper_bound = min(1.01, max(1.0, float(melted["value"].max()) + 0.01))
     plt.figure(figsize=(9, 5))
     sns.lineplot(data=melted, x="fold", y="value", hue="metric", marker="o")
-    plt.title(f"Evolucao das metricas por fold da {evaluation_label} do {model_spec.name}")
+    plt.title(f"Evolução das métricas por fold da {evaluation_label} do {model_spec.name}")
     plt.xlabel("Fold")
-    plt.ylabel("Valor da metrica")
+    plt.ylabel("Valor da métrica")
     plt.ylim(lower_bound, upper_bound)
     plt.tight_layout()
     plt.savefig(FIGURES_DIR / f"{model_spec.slug}_{file_suffix}.png", dpi=200)
@@ -583,7 +601,7 @@ def save_model_comparison_figure(
     sns.barplot(data=melted, x="model", y="value", hue="metric")
     plt.title(title)
     plt.xlabel("Modelo")
-    plt.ylabel("Valor medio")
+    plt.ylabel("Valor médio")
     plt.ylim(lower_bound, upper_bound)
     plt.tight_layout()
     plt.savefig(FIGURES_DIR / output_name, dpi=200)
@@ -611,18 +629,18 @@ def write_consolidated_report(
         eda_summary = eda_summary_path.read_text(encoding="utf-8").strip()
 
     report_lines = [
-        f"# Relatorio Consolidado - {model_spec.name}",
+        f"# Relatório Consolidado - {model_spec.name}",
         "",
         "## Resumo Executivo",
         f"- Linhas tratadas: {len(df)}",
         f"- Dispositivos de origem: {df['wlan.sa'].nunique()}",
         f"- Janelas usadas no modelo: {len(features)}",
-        f"- Acuracia media da CV estratificada: {cv_results['accuracy'].mean():.4f}",
-        f"- Macro F1 medio da CV estratificada: {cv_results['macro_f1'].mean():.4f}",
-        f"- Acuracia media da CV temporal: {temporal_cv_results['accuracy'].mean():.4f}",
-        f"- Macro F1 medio da CV temporal: {temporal_cv_results['macro_f1'].mean():.4f}",
-        f"- Acuracia media da CV temporal sliding: {sliding_temporal_cv_results['accuracy'].mean():.4f}",
-        f"- Macro F1 medio da CV temporal sliding: {sliding_temporal_cv_results['macro_f1'].mean():.4f}",
+        f"- Acurácia média da CV estratificada: {cv_results['accuracy'].mean():.4f}",
+        f"- Macro F1 médio da CV estratificada: {cv_results['macro_f1'].mean():.4f}",
+        f"- Acurácia média da CV temporal: {temporal_cv_results['accuracy'].mean():.4f}",
+        f"- Macro F1 médio da CV temporal: {temporal_cv_results['macro_f1'].mean():.4f}",
+        f"- Acurácia média da CV temporal sliding: {sliding_temporal_cv_results['accuracy'].mean():.4f}",
+        f"- Macro F1 médio da CV temporal sliding: {sliding_temporal_cv_results['macro_f1'].mean():.4f}",
         "",
         "## EDA",
     ]
@@ -630,19 +648,19 @@ def write_consolidated_report(
         report_lines.extend(["```text", eda_summary, "```", ""])
     report_lines.extend(
         [
-            "## Treino e Validacao",
+            "## Treino e Validação",
             "### Holdout temporal por dispositivo",
             "```text",
             classification_text.strip(),
             "```",
             "",
-            "### Validacao cruzada estratificada",
+            "### Validação cruzada estratificada",
             cv_results_to_markdown(cv_results),
             "",
-            "### Validacao cruzada temporal",
+            "### Validação cruzada temporal",
             cv_results_to_markdown(temporal_cv_results),
             "",
-            "### Validacao cruzada temporal sliding",
+            "### Validação cruzada temporal sliding",
             cv_results_to_markdown(sliding_temporal_cv_results),
             "",
         ]
@@ -650,14 +668,14 @@ def write_consolidated_report(
     if best_params is not None:
         report_lines.extend(
             [
-                "### Hiperparametros selecionados automaticamente",
-                f"- Melhor macro F1 medio na busca: {best_cv_score:.4f}",
+                "### Hiperparâmetros selecionados automaticamente",
+                f"- Melhor macro F1 médio na busca: {best_cv_score:.4f}",
             ]
         )
         report_lines.extend(f"- {name}: {value}" for name, value in best_params.items())
         report_lines.append("")
     if benchmark_df is not None:
-        report_lines.extend(["### Comparacao entre algoritmos", benchmark_to_markdown(benchmark_df), ""])
+        report_lines.extend(["### Comparação entre algoritmos", benchmark_to_markdown(benchmark_df), ""])
     if importances is not None:
         report_lines.append("### Features mais importantes")
         report_lines.extend(

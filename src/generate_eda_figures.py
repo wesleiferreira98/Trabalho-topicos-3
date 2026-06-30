@@ -29,7 +29,7 @@ def save_power_management(df: pd.DataFrame, output_dir: Path) -> None:
     labels = ["Desativado", "Ativado"]
     plt.figure(figsize=(7, 5))
     plt.bar(labels, power_counts.values, color=["#457b9d", "#e76f51"])
-    plt.title("Distribuicao de power management")
+    plt.title("Distribuição de power management")
     plt.ylabel("Frames")
     plt.tight_layout()
     plt.savefig(output_dir / "power_management_distribution.png", dpi=200)
@@ -52,7 +52,7 @@ def save_frame_length_boxplot(df: pd.DataFrame, output_dir: Path) -> None:
 
     plt.figure(figsize=(12, 6))
     sample.boxplot(column="frame_len", by="device", rot=35, grid=False)
-    plt.title("Distribuicao do tamanho dos frames nos principais dispositivos")
+    plt.title("Distribuição do tamanho dos frames nos principais dispositivos")
     plt.xlabel("MAC de origem")
     plt.ylabel("Tamanho do frame")
     plt.suptitle("")
@@ -74,9 +74,9 @@ def save_window_scatter(features: pd.DataFrame, output_dir: Path) -> None:
         size="unique_destinations",
         alpha=0.7,
     )
-    plt.title("Separacao de dispositivos no espaco de features")
-    plt.xlabel("Media do tamanho do frame por janela")
-    plt.ylabel("Media do IAT por janela")
+    plt.title("Separação de dispositivos no espaço de features")
+    plt.xlabel("Média do tamanho do frame por janela")
+    plt.ylabel("Média do IAT por janela")
     plt.tight_layout()
     plt.savefig(output_dir / "window_feature_scatter.png", dpi=200)
     plt.close()
@@ -99,7 +99,7 @@ def save_feature_correlation(features: pd.DataFrame, output_dir: Path) -> None:
     corr = features[numeric_cols].corr()
     plt.figure(figsize=(10, 8))
     sns.heatmap(corr, cmap="crest", annot=True, fmt=".2f", square=True)
-    plt.title("Correlacao entre features agregadas")
+    plt.title("Correlação entre features agregadas")
     plt.tight_layout()
     plt.savefig(output_dir / "feature_correlation_heatmap.png", dpi=200)
     plt.close()
@@ -113,8 +113,8 @@ def save_summary(df: pd.DataFrame, features: pd.DataFrame, output_dir: Path) -> 
         f"Dispositivos de origem: {df['wlan.sa'].nunique()}",
         f"Dispositivos com janelas suficientes: {features['wlan.sa'].nunique()}",
         f"Janelas agregadas: {len(features)}",
-        f"Frame len medio: {df['frame.len'].mean():.3f}",
-        f"IAT medio: {df['frame.time_delta_displayed'].mean():.6f}",
+        f"Frame len médio: {df['frame.len'].mean():.3f}",
+        f"IAT médio: {df['frame.time_delta_displayed'].mean():.6f}",
         "Top 10 MACs de origem:",
     ]
     summary_lines.extend(f"- {mac}: {count}" for mac, count in top_sources.items())
