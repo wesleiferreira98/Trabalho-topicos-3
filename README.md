@@ -146,36 +146,7 @@ streamlit run app/streamlit_app.py
 
 ### 4.1 Visão Geral do Pipeline
 
-```
-Captura Wi-Fi (bruta)
-        │
-        ▼
-[data/01 - Não-Tratados]  ──→  data.py: load_processed_training()
-                                  │  coerce numérico, normalizar pwrmgt, dropna
-                                  ▼
-                          [data/02 - Tratados] ─→ 640.889 frames, 15 dispositivos
-                                  │
-                                  ▼
-                            features.py: build_device_windows()
-                                  │  agrega em janelas de 100 pacotes/dispositivo
-                                  ▼
-                          6.399 janelas × 11 atributos
-                                  │
-                          ┌───────┴───────┐
-                          │               │
-                   holdout temporal   validação cruzada
-                   (80/20 por MAC)    (estratificada + temporal)
-                          │               │
-                          ▼               ▼
-                    model_pipeline.py: tune_estimator()
-                      RandomizedSearchCV, scoring=f1_macro
-                          │
-                          ▼
-                    RF / KNN / SVM treinados
-                          │
-                          ▼
-                   reports/ + models/ + figures/
-```
+![Pipeline do projeto](reports/figures/pipeline%20do%20trabalho.jpg)
 
 O pipeline parte da captura Wi-Fi bruta, realiza o tratamento dos dados, agrega os frames em janelas comportamentais por dispositivo, aplica estratégias de validação temporal e estratificada, ajusta hiperparâmetros via `RandomizedSearchCV` e exporta modelos, relatórios e figuras.
 
@@ -684,7 +655,7 @@ Os erros de classificação mais frequentes ocorrem entre dispositivos com pouco
 
 | Limitação                                   | Descrição                                                                                                                                                                     | Impacto                                                                         |
 | --------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------- |
-| **Escopo do alvo**                      | O modelo classifica dispositivos **observados no conjunto analisado** (11 MACs de origem). Não generaliza para dispositivos nunca vistos.                               | Não pode ser usado diretamente como detector universal de tipo de dispositivo. |
+| **Escopo do alvo**                      | O modelo classifica dispositivos**observados no conjunto analisado** (11 MACs de origem). Não generaliza para dispositivos nunca vistos.                                 | Não pode ser usado diretamente como detector universal de tipo de dispositivo. |
 | **Dependência do ambiente de captura** | Com apenas 38 destinos distintos em todo o dataset, o atributo`unique_destinations` pode refletir a topologia da rede de captura tanto quanto o comportamento do dispositivo. | Risco de baixa transferabilidade para redes com infraestrutura diferente.       |
 | **Desbalanceamento residual**           | Mesmo com Macro F1 e`class_weight="balanced"`, classes com poucas janelas têm menor precisão nas matrizes de confusão.                                                     | Erros concentrados nos dispositivos menos ativos.                               |
 | **Granularidade fixa de janela**        | A janela de 100 pacotes é uma escolha de projeto. Outra granularidade altera o equilíbrio entre estabilidade estatística e sensibilidade a mudanças de comportamento.       | Resultados específicos a essa configuração.                                  |
