@@ -4,7 +4,7 @@ from iot_fingerprint.config import PROCESSED_TRAINING_CSV
 
 
 def load_processed_training(path=PROCESSED_TRAINING_CSV) -> pd.DataFrame:
-    """Load the treated Wi-Fi frame dataset with normalized column types."""
+    """Carrega o dataset tratado de frames Wi-Fi, coerce os tipos numericos e remove linhas com valores ausentes."""
     df = pd.read_csv(path)
 
     df["frame.time_delta_displayed"] = pd.to_numeric(

@@ -4,6 +4,7 @@ from model_specs import ALL_SPECS, RF_SPEC
 
 
 def train_all_models() -> None:
+    """Treina os tres modelos em sequencia; o Random Forest e executado com benchmark_specs para gerar o comparativo entre todos os algoritmos."""
     for spec in ALL_SPECS:
         print(f"Training {spec.name}...")
         if spec.slug == RF_SPEC.slug:

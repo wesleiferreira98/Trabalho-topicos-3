@@ -1,3 +1,5 @@
+"""Centraliza os caminhos absolutos do projeto para que todos os modulos referenciem os mesmos diretorios sem duplicar logica de resolucao de caminho."""
+
 from pathlib import Path
 
 

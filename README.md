@@ -534,19 +534,20 @@ Os resultados completos de cada combinação testada estão salvos em `reports/r
 
 ### 7.3 Resumo dos Melhores Hiperparâmetros
 
-| Modelo        | Parâmetro            | Valor selecionado | Macro F1 da busca |
-| ------------- | --------------------- | ----------------- | ----------------- |
-| Random Forest | `n_estimators`      | 200               | **0,9784**  |
-| Random Forest | `max_depth`         | 10                |                   |
-| Random Forest | `min_samples_split` | 2                 |                   |
-| Random Forest | `min_samples_leaf`  | 1                 |                   |
-| Random Forest | `max_features`      | `"log2"`        |                   |
-| KNN           | `n_neighbors`       | 7                 | **0,9450**  |
-| KNN           | `weights`           | `"distance"`    |                   |
-| KNN           | `p`                 | 1 (Manhattan)     |                   |
-| SVM           | `kernel`            | `"rbf"`         | **0,9550**  |
-| SVM           | `C`                 | 10,0              |                   |
-| SVM           | `gamma`             | `"scale"`       |                   |
+| Parâmetro              | Random Forest      | KNN                  | SVM               |
+| ---------------------- | ------------------ | -------------------- | ----------------- |
+| **Macro F1 (busca)**   | **0,9784**         | **0,9450**           | **0,9550**        |
+| `n_estimators`         | 200                | --                   | --                |
+| `max_depth`            | 10                 | --                   | --                |
+| `min_samples_split`    | 2                  | --                   | --                |
+| `min_samples_leaf`     | 1                  | --                   | --                |
+| `max_features`         | `"log2"`           | --                   | --                |
+| `n_neighbors`          | --                 | 7                    | --                |
+| `weights`              | --                 | `"distance"`         | --                |
+| `p` (métrica)          | --                 | 1 (Manhattan)        | --                |
+| `kernel`               | --                 | --                   | `"rbf"`           |
+| `C`                    | --                 | --                   | 10,0              |
+| `gamma`                | --                 | --                   | `"scale"`         |
 
 Os arquivos com os parâmetros completos estão em `reports/rf_best_params.json`, `reports/knn_best_params.json` e `reports/svm_best_params.json`. Os resultados de todas as combinações testadas estão em `reports/rf_tuning_cv_results.csv`, `reports/knn_tuning_cv_results.csv` e `reports/svm_tuning_cv_results.csv`.
 

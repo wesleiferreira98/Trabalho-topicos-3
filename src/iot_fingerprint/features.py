@@ -6,7 +6,7 @@ def build_device_windows(
     device_col: str = "wlan.sa",
     window_size: int = 100,
 ) -> pd.DataFrame:
-    """Aggregate frame-level traffic into fixed-size packet windows per device."""
+    """Agrega frames individuais em janelas de tamanho fixo por dispositivo, extraindo estatisticas de comprimento, IAT, power management e destinos como features comportamentais."""
     work = df.copy()
     work["_window"] = work.groupby(device_col).cumcount() // window_size
 

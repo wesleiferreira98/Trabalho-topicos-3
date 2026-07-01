@@ -26,6 +26,17 @@ CV_FOLDS = 5
 
 @dataclass(frozen=True)
 class ModelSpec:
+    """Configuracao imutavel de um classificador usado no pipeline de treinamento.
+
+    Attributes:
+        name: Nome legivel do modelo, usado em titulos de graficos e relatorios.
+        slug: Identificador curto em minusculas, usado como prefixo de arquivos de saida.
+        estimator_factory: Funcao sem argumentos que instancia um novo estimador scikit-learn.
+        supports_feature_importance: Indica se o estimador expoe feature_importances_ (ex: Random Forest).
+        param_distributions: Dicionario de espacos de busca para RandomizedSearchCV; None desativa o tuning.
+        tuning_iterations: Numero de combinacoes de hiperparametros amostradas na busca aleatoria.
+    """
+
     name: str
     slug: str
     estimator_factory: Callable[[], object]
@@ -35,6 +46,15 @@ class ModelSpec:
 
 
 def prepare_features() -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.DataFrame]:
+    """Carrega o dataset, constroi janelas de features por dispositivo, filtra dispositivos com poucos exemplos e divide em treino e teste temporal.
+
+    Returns:
+        df: DataFrame bruto de frames Wi-Fi carregado de disco.
+        features: DataFrame de janelas agregadas apos o filtro de MIN_WINDOWS_PER_DEVICE.
+        train_df: Particao de treino com colunas wlan.sa, _window e todas as features.
+        test_df: Particao de teste com a mesma estrutura de train_df.
+        x_all: DataFrame de features numericas sem as colunas de identificacao (wlan.sa e _window).
+    """
     df = load_processed_training()
     features = build_device_windows(df)
 
@@ -50,6 +70,20 @@ def temporal_device_split(
     features: pd.DataFrame,
     test_fraction: float = TEST_FRACTION,
 ) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """Divide as janelas de cada dispositivo em treino e teste respeitando a ordem temporal das capturas.
+
+    A divisao e feita individualmente por dispositivo para evitar que janelas futuras de um
+    dispositivo vazem para o treino de outro. O indice de corte garante pelo menos uma janela
+    em cada particao.
+
+    Args:
+        features: DataFrame de janelas agregadas contendo as colunas wlan.sa e _window.
+        test_fraction: Fracao de janelas reservada para teste (padrao 0.2, ou seja, 80/20).
+
+    Returns:
+        train_df: DataFrame com as janelas de treino de todos os dispositivos concatenadas.
+        test_df: DataFrame com as janelas de teste de todos os dispositivos concatenadas.
+    """
     train_parts: list[pd.DataFrame] = []
     test_parts: list[pd.DataFrame] = []
 
@@ -70,6 +104,21 @@ def stratified_cv(
     estimator: object,
     n_splits: int = CV_FOLDS,
 ) -> pd.DataFrame:
+    """Executa validacao cruzada Stratified K-Fold e retorna metricas de desempenho por fold.
+
+    Cada fold e treinado sobre uma copia independente do estimador (via clone) para evitar
+    vazamento de estado entre iteracoes. A estratificacao garante que a proporcao de classes
+    seja preservada em treino e teste de cada fold.
+
+    Args:
+        features: DataFrame de janelas agregadas com colunas wlan.sa e _window.
+        estimator: Estimador scikit-learn ja configurado (com hiperparametros finais).
+        n_splits: Numero de folds da validacao cruzada (padrao 5).
+
+    Returns:
+        DataFrame com uma linha por fold e as colunas: fold, train_windows, test_windows,
+        accuracy, macro_f1 e weighted_f1.
+    """
     x = features.drop(columns=["wlan.sa", "_window"])
     y = features["wlan.sa"]
     splitter = StratifiedKFold(n_splits=n_splits, shuffle=True, random_state=42)
@@ -103,6 +152,20 @@ def temporal_cv_splits(
     features: pd.DataFrame,
     n_splits: int = CV_FOLDS,
 ) -> list[tuple[np.ndarray, np.ndarray]]:
+    """Gera pares de indices (treino, teste) para validacao cruzada temporal expanding.
+
+    Em cada fold, o conjunto de treino acumula todos os blocos temporais anteriores do
+    dispositivo (expanding window). O bloco de teste e sempre o bloco imediatamente seguinte
+    ao ultimo bloco de treino, simulando predicao no futuro.
+
+    Args:
+        features: DataFrame de janelas agregadas com colunas wlan.sa e _window.
+        n_splits: Numero de folds temporais a gerar (padrao 5).
+
+    Returns:
+        Lista de tuplas (train_indices, test_indices), cada uma contendo arrays de inteiros
+        com os indices globais do DataFrame para treino e teste daquele fold.
+    """
     splits: list[tuple[np.ndarray, np.ndarray]] = []
 
     for fold in range(1, n_splits + 1):
@@ -137,6 +200,20 @@ def temporal_cv(
     estimator: object,
     n_splits: int = CV_FOLDS,
 ) -> pd.DataFrame:
+    """Executa validacao cruzada temporal expanding e retorna metricas de desempenho por fold.
+
+    Usa os splits gerados por temporal_cv_splits para treinar e avaliar o estimador em
+    cada fold. O estimador e clonado a cada iteracao para garantir independencia entre folds.
+
+    Args:
+        features: DataFrame de janelas agregadas com colunas wlan.sa e _window.
+        estimator: Estimador scikit-learn ja configurado com hiperparametros finais.
+        n_splits: Numero de folds temporais (padrao 5).
+
+    Returns:
+        DataFrame com uma linha por fold e as colunas: fold, train_windows, test_windows,
+        accuracy, macro_f1 e weighted_f1.
+    """
     x = features.drop(columns=["wlan.sa", "_window"])
     y = features["wlan.sa"]
     fold_metrics: list[dict[str, float | int]] = []
@@ -169,6 +246,20 @@ def sliding_temporal_cv_splits(
     features: pd.DataFrame,
     n_splits: int = CV_FOLDS,
 ) -> list[tuple[np.ndarray, np.ndarray]]:
+    """Gera pares de indices (treino, teste) para validacao cruzada temporal sliding.
+
+    Diferente do expanding, a janela de treino tem tamanho fixo e desliza para frente a
+    cada fold, descartando o historico mais antigo. Isso simula um cenario onde o modelo
+    e retreinado periodicamente apenas com dados recentes.
+
+    Args:
+        features: DataFrame de janelas agregadas com colunas wlan.sa e _window.
+        n_splits: Numero de folds temporais a gerar (padrao 5).
+
+    Returns:
+        Lista de tuplas (train_indices, test_indices), cada uma contendo arrays de inteiros
+        com os indices globais do DataFrame para treino e teste daquele fold.
+    """
     splits: list[tuple[np.ndarray, np.ndarray]] = []
 
     for fold in range(n_splits):
@@ -204,6 +295,20 @@ def sliding_temporal_cv(
     estimator: object,
     n_splits: int = CV_FOLDS,
 ) -> pd.DataFrame:
+    """Executa validacao cruzada temporal sliding e retorna metricas de desempenho por fold.
+
+    Usa os splits gerados por sliding_temporal_cv_splits para treinar e avaliar o estimador
+    em cada fold. O estimador e clonado a cada iteracao para garantir independencia entre folds.
+
+    Args:
+        features: DataFrame de janelas agregadas com colunas wlan.sa e _window.
+        estimator: Estimador scikit-learn ja configurado com hiperparametros finais.
+        n_splits: Numero de folds temporais (padrao 5).
+
+    Returns:
+        DataFrame com uma linha por fold e as colunas: fold, train_windows, test_windows,
+        accuracy, macro_f1 e weighted_f1.
+    """
     x = features.drop(columns=["wlan.sa", "_window"])
     y = features["wlan.sa"]
     fold_metrics: list[dict[str, float | int]] = []
@@ -240,6 +345,24 @@ def benchmark_models(
     x_test: pd.DataFrame,
     y_test: pd.Series,
 ) -> pd.DataFrame:
+    """Treina, ajusta hiperparametros e avalia todos os modelos sob as tres estrategias de validacao.
+
+    Para cada ModelSpec, executa tune_estimator, evaluate_holdout, stratified_cv,
+    temporal_cv e sliding_temporal_cv, consolidando os resultados em um unico DataFrame
+    ordenado por cv_macro_f1_mean decrescente.
+
+    Args:
+        model_specs: Lista de ModelSpec descrevendo cada classificador a ser avaliado.
+        features: DataFrame completo de janelas (treino e teste) usado nas validacoes cruzadas.
+        x_train: Features do conjunto de treino do holdout temporal.
+        y_train: Rotulos do conjunto de treino do holdout temporal.
+        x_test: Features do conjunto de teste do holdout temporal.
+        y_test: Rotulos do conjunto de teste do holdout temporal.
+
+    Returns:
+        DataFrame com uma linha por modelo contendo metricas de holdout, CV estratificada,
+        CV temporal expanding, CV temporal sliding, Macro F1 da busca e melhores hiperparametros.
+    """
     rows: list[dict[str, float | str]] = []
 
     for spec in model_specs:
@@ -281,6 +404,18 @@ def evaluate_holdout(
     x_test: pd.DataFrame,
     y_test: pd.Series,
 ) -> dict[str, float]:
+    """Treina o estimador no conjunto de treino e calcula as metricas de desempenho no conjunto de teste holdout.
+
+    Args:
+        estimator: Estimador scikit-learn configurado com os melhores hiperparametros.
+        x_train: Features do conjunto de treino.
+        y_train: Rotulos do conjunto de treino.
+        x_test: Features do conjunto de teste.
+        y_test: Rotulos do conjunto de teste.
+
+    Returns:
+        Dicionario com as chaves accuracy, macro_f1 e weighted_f1 calculadas no conjunto de teste.
+    """
     estimator.fit(x_train, y_train)
     predictions = estimator.predict(x_test)
     return {
@@ -295,6 +430,25 @@ def tune_estimator(
     x_train: pd.DataFrame,
     y_train: pd.Series,
 ) -> tuple[object, dict[str, object], float] | tuple[object, None, None]:
+    """Busca os melhores hiperparametros com RandomizedSearchCV e retorna o estimador reajustado sobre o conjunto de treino completo.
+
+    Se model_spec.param_distributions for None, treina o estimador diretamente sem busca e
+    retorna None para os parametros e o score. Caso contrario, executa RandomizedSearchCV com
+    StratifiedKFold interno e scoring f1_macro, salva os resultados em CSV via _save_tuning_results
+    e retorna o melhor estimador ja reajustado (refit=True).
+
+    Args:
+        model_spec: Especificacao do modelo contendo a fabrica do estimador, o espaco de busca
+                    e o numero de iteracoes.
+        x_train: Features do conjunto de treino para a busca de hiperparametros.
+        y_train: Rotulos do conjunto de treino.
+
+    Returns:
+        Tupla (estimador, best_params, best_score) onde estimador e o melhor modelo reajustado,
+        best_params e o dicionario de hiperparametros selecionados e best_score e o Macro F1
+        medio na validacao interna da busca. Retorna (estimador, None, None) quando nao ha
+        espaco de busca definido.
+    """
     estimator = model_spec.estimator_factory()
     if not model_spec.param_distributions:
         estimator.fit(x_train, y_train)
@@ -317,6 +471,20 @@ def tune_estimator(
 
 
 def _save_tuning_results(model_spec: ModelSpec, search: RandomizedSearchCV) -> None:
+    """Salva em CSV todas as combinacoes de hiperparametros testadas na busca com seus scores medios, desvios e ranking.
+
+    Extrai as colunas param_* de cv_results_, remove o prefixo param_ dos nomes, adiciona
+    mean_macro_f1, std_macro_f1 e rank, ordena pelo ranking e persiste em
+    reports/<slug>_tuning_cv_results.csv.
+
+    Args:
+        model_spec: Especificacao do modelo usada para compor o nome do arquivo de saida.
+        search: Objeto RandomizedSearchCV ja ajustado contendo cv_results_ com os resultados
+                de todas as combinacoes testadas.
+
+    Returns:
+        None. O arquivo CSV e salvo em disco como efeito colateral.
+    """
     results = search.cv_results_
     param_cols = {
         key: results[key]
@@ -337,6 +505,19 @@ def run_training_pipeline(
     model_spec: ModelSpec,
     benchmark_specs: list[ModelSpec] | None = None,
 ) -> None:
+    """Orquestra o pipeline completo de treinamento de um modelo: prepara features, ajusta hiperparametros, avalia nos tres protocolos de validacao, imprime metricas no console e persiste todos os artefatos.
+
+    Se benchmark_specs for fornecido, executa benchmark_models para comparar todos os modelos
+    e salva o comparativo em reports/model_benchmark.csv e nos graficos de comparacao.
+
+    Args:
+        model_spec: Especificacao do modelo principal a ser treinado e avaliado.
+        benchmark_specs: Lista opcional de ModelSpec para comparacao entre modelos. Quando
+                         fornecida, o benchmark e executado apos o treinamento do modelo principal.
+
+    Returns:
+        None. Todos os artefatos (modelo, CSVs, figuras, relatorio) sao salvos em disco.
+    """
     sns.set_theme(style="whitegrid")
     df, features, train_df, test_df, _ = prepare_features()
     x_train = train_df.drop(columns=["wlan.sa", "_window"])
@@ -447,6 +628,30 @@ def save_model_outputs(
     best_params: dict[str, object] | None,
     best_cv_score: float | None,
 ) -> None:
+    """Persiste todos os artefatos do modelo treinado: modelo serializado, CSVs de validacao, JSON de hiperparametros, graficos de comparacao e relatorio consolidado.
+
+    Quando model_spec.slug for 'rf', os CSVs de CV sao copiados adicionalmente para os
+    arquivos canonicos (cv_results.csv, temporal_cv_results.csv, sliding_temporal_cv_results.csv)
+    que o dashboard Streamlit consome por padrao.
+
+    Args:
+        model_spec: Especificacao do modelo para compor nomes de arquivos de saida.
+        estimator: Estimador treinado a ser serializado em formato joblib.
+        cv_results: DataFrame com metricas por fold da CV estratificada.
+        temporal_cv_results: DataFrame com metricas por fold da CV temporal expanding.
+        sliding_temporal_cv_results: DataFrame com metricas por fold da CV temporal sliding.
+        benchmark_df: DataFrame comparativo entre modelos ou None se benchmark nao foi executado.
+        df: DataFrame bruto de frames Wi-Fi usado para compor o relatorio.
+        features: DataFrame de janelas agregadas usado para compor o relatorio.
+        importances: Series de importancia de features ou None se o modelo nao a suporta.
+        y_test: Rotulos reais do conjunto de teste do holdout.
+        predictions: Predicoes do modelo no conjunto de teste do holdout.
+        best_params: Dicionario de hiperparametros selecionados ou None se nao houve tuning.
+        best_cv_score: Melhor Macro F1 medio na busca de hiperparametros ou None.
+
+    Returns:
+        None. Todos os arquivos sao salvos em disco como efeito colateral.
+    """
     REPORTS_DIR.mkdir(parents=True, exist_ok=True)
     MODELS_DIR.mkdir(parents=True, exist_ok=True)
     dump(estimator, MODELS_DIR / f"{model_spec.slug}_device_fingerprint.joblib")
@@ -517,6 +722,17 @@ def save_confusion_matrix_figure(
     y_pred: pd.Series,
     labels: list[str],
 ) -> None:
+    """Plota e salva o heatmap da matriz de confusao do modelo no conjunto de teste holdout.
+
+    Args:
+        model_spec: Especificacao do modelo para compor o titulo e o nome do arquivo de saida.
+        y_true: Rotulos reais do conjunto de teste.
+        y_pred: Predicoes do modelo no conjunto de teste.
+        labels: Lista ordenada de classes usada para alinhar linhas e colunas da matriz.
+
+    Returns:
+        None. A figura e salva em reports/figures/<slug>_confusion_matrix.png.
+    """
     cm = confusion_matrix(y_true, y_pred, labels=labels)
     FIGURES_DIR.mkdir(parents=True, exist_ok=True)
     plt.figure(figsize=(11, 9))
@@ -530,6 +746,18 @@ def save_confusion_matrix_figure(
 
 
 def save_feature_importance_figure(model_spec: ModelSpec, importances: pd.Series) -> None:
+    """Plota e salva o grafico de barras horizontais com a importancia de cada feature do modelo.
+
+    Disponivel apenas para modelos que expõem feature_importances_ (ex: Random Forest).
+    As features sao ordenadas de forma crescente para que a mais importante apare§a no topo.
+
+    Args:
+        model_spec: Especificacao do modelo para compor o titulo e o nome do arquivo de saida.
+        importances: Series indexada pelo nome da feature com os valores de importancia.
+
+    Returns:
+        None. A figura e salva em reports/figures/<slug>_feature_importance.png.
+    """
     FIGURES_DIR.mkdir(parents=True, exist_ok=True)
     ordered = importances.sort_values(ascending=True)
     plt.figure(figsize=(10, 6))
@@ -548,6 +776,20 @@ def save_cv_metrics_figure(
     file_suffix: str = "cv_metrics_by_fold",
     evaluation_label: str = "CV estratificada",
 ) -> None:
+    """Plota e salva o grafico de linha mostrando a evolucao das metricas ao longo dos folds de uma rodada de validacao cruzada.
+
+    O eixo Y e ajustado automaticamente para ampliar a regiao de variacao das metricas,
+    facilitando a visualizacao de diferencas entre folds.
+
+    Args:
+        model_spec: Especificacao do modelo para compor o titulo e o nome do arquivo de saida.
+        cv_results: DataFrame com colunas fold, accuracy, macro_f1 e weighted_f1.
+        file_suffix: Sufixo adicionado ao slug do modelo para nomear o arquivo PNG de saida.
+        evaluation_label: Rotulo da estrategia de validacao usado no titulo do grafico.
+
+    Returns:
+        None. A figura e salva em reports/figures/<slug>_<file_suffix>.png.
+    """
     FIGURES_DIR.mkdir(parents=True, exist_ok=True)
     melted = cv_results.melt(
         id_vars=["fold"],
@@ -575,6 +817,20 @@ def save_model_comparison_figure(
     title: str,
     output_name: str,
 ) -> None:
+    """Plota e salva o grafico de barras agrupadas comparando as metricas dos tres modelos em uma estrategia de validacao.
+
+    Os nomes tecnicos das colunas (ex: cv_macro_f1_mean) sao substituidos por rotulos
+    legiveis (ex: Macro F1) antes da plotagem. O eixo Y e ajustado automaticamente.
+
+    Args:
+        benchmark_df: DataFrame com uma linha por modelo e colunas de metricas agregadas.
+        value_vars: Lista de colunas do benchmark_df a incluir no grafico (ex: cv_macro_f1_mean).
+        title: Titulo do grafico exibido na figura.
+        output_name: Nome do arquivo PNG de saida salvo em reports/figures/.
+
+    Returns:
+        None. A figura e salva em reports/figures/<output_name>.
+    """
     FIGURES_DIR.mkdir(parents=True, exist_ok=True)
     melted = benchmark_df.melt(
         id_vars=["model"],
@@ -622,6 +878,28 @@ def write_consolidated_report(
     best_params: dict[str, object] | None,
     best_cv_score: float | None,
 ) -> None:
+    """Gera e salva o relatorio consolidado em Markdown com metricas de todas as validacoes, hiperparametros e lista de artefatos produzidos.
+
+    Quando model_spec.slug for 'rf', o relatorio e salvo adicionalmente como
+    reports/model_report.md, que e o arquivo consumido por padrao pelo dashboard Streamlit.
+
+    Args:
+        model_spec: Especificacao do modelo para compor o titulo e o nome do arquivo de saida.
+        df: DataFrame bruto de frames Wi-Fi para exibir contagens no resumo executivo.
+        features: DataFrame de janelas agregadas para exibir total de janelas no resumo.
+        importances: Series de importancia de features ou None se o modelo nao a suporta.
+        cv_results: DataFrame com metricas por fold da CV estratificada.
+        temporal_cv_results: DataFrame com metricas por fold da CV temporal expanding.
+        sliding_temporal_cv_results: DataFrame com metricas por fold da CV temporal sliding.
+        benchmark_df: DataFrame comparativo entre modelos ou None se benchmark nao foi executado.
+        y_test: Rotulos reais do conjunto de teste para gerar o classification_report.
+        predictions: Predicoes do modelo no conjunto de teste.
+        best_params: Dicionario de hiperparametros selecionados ou None se nao houve tuning.
+        best_cv_score: Melhor Macro F1 medio na busca de hiperparametros ou None.
+
+    Returns:
+        None. O relatorio e salvo em reports/<slug>_model_report.md (e reports/model_report.md para rf).
+    """
     classification_text = classification_report(y_test, predictions)
     eda_summary_path = FIGURES_DIR / "eda_summary.txt"
     eda_summary = ""
@@ -714,6 +992,15 @@ def write_consolidated_report(
 
 
 def cv_results_to_markdown(cv_results: pd.DataFrame) -> str:
+    """Converte o DataFrame de resultados de validacao cruzada em tabela Markdown formatada.
+
+    Args:
+        cv_results: DataFrame com colunas fold, train_windows, test_windows, accuracy,
+                    macro_f1 e weighted_f1.
+
+    Returns:
+        String contendo a tabela Markdown com cabecalho, separador e uma linha por fold.
+    """
     header = "| fold | train_windows | test_windows | accuracy | macro_f1 | weighted_f1 |"
     separator = "| --- | --- | --- | --- | --- | --- |"
     rows = [header, separator]
@@ -727,6 +1014,16 @@ def cv_results_to_markdown(cv_results: pd.DataFrame) -> str:
 
 
 def benchmark_to_markdown(benchmark_df: pd.DataFrame) -> str:
+    """Converte o DataFrame de benchmark comparativo dos modelos em tabela Markdown com todas as metricas de holdout e validacao cruzada.
+
+    Args:
+        benchmark_df: DataFrame com uma linha por modelo e colunas de metricas de holdout,
+                      CV estratificada, CV temporal expanding, CV temporal sliding, Macro F1
+                      da busca e melhores hiperparametros.
+
+    Returns:
+        String contendo a tabela Markdown completa com cabecalho, separador e uma linha por modelo.
+    """
     header = (
         "| model | holdout_accuracy | holdout_macro_f1 | holdout_weighted_f1 | "
         "cv_accuracy_mean | cv_macro_f1_mean | cv_weighted_f1_mean | "

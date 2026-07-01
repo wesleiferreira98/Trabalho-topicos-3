@@ -1,3 +1,5 @@
+"""Define as especificacoes dos tres classificadores (RF, KNN, SVM) com seus espacos de busca de hiperparametros e as agrupa em ALL_SPECS para uso no pipeline de benchmark."""
+
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.neighbors import KNeighborsClassifier
 from sklearn.pipeline import Pipeline
